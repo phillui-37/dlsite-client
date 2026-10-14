@@ -78,3 +78,13 @@ Settings → Nest import reads **only** `libraryDirectory` / `cacheDirectory` fr
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | ADRs |
 | [`docs/MILESTONES.md`](docs/MILESTONES.md) | Milestone status |
 | [`docs/PACKAGING.md`](docs/PACKAGING.md) | Windows MSI / Linux AppImage |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to report issues (no external PRs) |
+| [`LICENSE`](LICENSE) | MIT |
+
+## License
+
+[MIT](LICENSE) © 2026 Phil Lui
+
+## Contributing
+
+Pull requests are **not** accepted. Please open a GitHub Issue instead — see [`CONTRIBUTING.md`](CONTRIBUTING.md).
