@@ -1,6 +1,7 @@
 module DlsiteClient.App.Views.DownloadsView
 
 open System
+open System.Runtime.InteropServices
 open Avalonia
 open Avalonia.Controls
 open Avalonia.Layout
@@ -13,10 +14,34 @@ open DlsiteClient.App.Localization
 open DlsiteClient.App.Services
 open DlsiteClient.App.Fmt
 
+[<DllImport("user32.dll", CharSet = CharSet.Unicode)>]
+extern int private MessageBoxW(nativeint hWnd, string text, string caption, uint32 typ)
+
+let private MB_YESNO = 0x4u
+let private MB_ICONQUESTION = 0x20u
+let private IDYES = 6
+
 let private fileName (s: string) =
     if String.IsNullOrEmpty s then "" else s
 
-let private jobRow (svc: AppServices) (j: DownloadJob) (bump: unit -> unit) =
+let private confirmRedownload (svc: AppServices) (workno: string) (bump: unit -> unit) =
+    let r =
+        MessageBoxW(
+            0n,
+            t "downloads.corruptArchive",
+            t "downloads.redownload",
+            MB_YESNO ||| MB_ICONQUESTION)
+    if r = IDYES then
+        svc.Downloads.RequestRedownload workno
+        bump ()
+
+let private jobRow
+    (svc: AppServices)
+    (j: DownloadJob)
+    (section: string)
+    (bump: unit -> unit)
+    =
+    let cached = svc.Downloads.HasCachedArchive j.Workno
     DockPanel.create [
         DockPanel.margin 6.0
         DockPanel.children [
@@ -25,14 +50,34 @@ let private jobRow (svc: AppServices) (j: DownloadJob) (bump: unit -> unit) =
                 StackPanel.orientation Orientation.Horizontal
                 StackPanel.spacing 4.0
                 StackPanel.children [
+                    if section = "upNext" then
+                        Button.create [
+                            Button.content (t "downloads.moveUp")
+                            Button.onClick (fun _ -> svc.Downloads.MoveUpNext(j.Workno, -1); bump ())
+                        ]
+                        Button.create [
+                            Button.content (t "downloads.moveDown")
+                            Button.onClick (fun _ -> svc.Downloads.MoveUpNext(j.Workno, 1); bump ())
+                        ]
                     match j.State with
                     | DownloadJobState.Downloading ->
                         Button.create [
                             Button.content (t "downloads.pause")
                             Button.onClick (fun _ -> svc.Downloads.Pause j.Workno; bump ())
                         ]
-                    | DownloadJobState.Paused
+                    | DownloadJobState.Paused ->
+                        Button.create [
+                            Button.content (t "downloads.resume")
+                            Button.onClick (fun _ -> svc.Downloads.ResumeJob j.Workno; bump ())
+                        ]
                     | DownloadJobState.Failed ->
+                        if cached then
+                            Button.create [
+                                Button.content (t "downloads.retryExtract")
+                                Button.onClick (fun _ ->
+                                    svc.Downloads.RequestRetryExtract j.Workno
+                                    bump ())
+                            ]
                         Button.create [
                             Button.content (t "downloads.resume")
                             Button.onClick (fun _ -> svc.Downloads.ResumeJob j.Workno; bump ())
@@ -40,7 +85,7 @@ let private jobRow (svc: AppServices) (j: DownloadJob) (bump: unit -> unit) =
                     | DownloadJobState.CorruptArchive ->
                         Button.create [
                             Button.content (t "downloads.redownload")
-                            Button.onClick (fun _ -> svc.Downloads.RequestRedownload j.Workno; bump ())
+                            Button.onClick (fun _ -> confirmRedownload svc j.Workno bump)
                         ]
                     | DownloadJobState.Completed ->
                         Button.create [
@@ -49,7 +94,8 @@ let private jobRow (svc: AppServices) (j: DownloadJob) (bump: unit -> unit) =
                                 svc.Shell.OpenFolder svc.Settings.Current.LibraryDirectory)
                         ]
                     | DownloadJobState.Extracting
-                    | DownloadJobState.Queued ->
+                    | DownloadJobState.Queued
+                    | _ ->
                         TextBlock.create [ TextBlock.text "" ]
                 ]
             ]
@@ -64,6 +110,11 @@ let private jobRow (svc: AppServices) (j: DownloadJob) (bump: unit -> unit) =
                     ]
                     TextBlock.create [
                         TextBlock.text (
+                            let statusLabel =
+                                match j.State with
+                                | DownloadJobState.CorruptArchive -> t "downloads.corruptArchive"
+                                | DownloadJobState.Failed when cached -> t "downloads.extractFailed"
+                                | _ -> j.State.ToString()
                             let err =
                                 if String.IsNullOrEmpty j.ErrorMessage then ""
                                 else " - " + j.ErrorMessage
@@ -72,14 +123,9 @@ let private jobRow (svc: AppServices) (j: DownloadJob) (bump: unit -> unit) =
                                 (fileName j.CurrentFileName)
                                 (sizePlain j.BytesDownloaded)
                                 (sizePlain j.BytesTotal)
-                                (j.State.ToString())
+                                statusLabel
                                 err)
                     ]
-                    if j.State = DownloadJobState.Failed && not (String.IsNullOrEmpty j.ErrorMessage) then
-                        Button.create [
-                            Button.content (t "downloads.retryExtract")
-                            Button.onClick (fun _ -> svc.Downloads.RequestRetryExtract j.Workno; bump ())
-                        ]
                 ]
             ]
         ]
@@ -137,14 +183,14 @@ let view () =
                                     TextBlock.fontWeight FontWeight.SemiBold
                                   ]
                                   :> IView ]
-                                @ (active |> Seq.map (fun j -> jobRow svc j bump :> IView) |> Seq.toList)
+                                @ (active |> Seq.map (fun j -> jobRow svc j "active" bump :> IView) |> Seq.toList)
                                 @ [ TextBlock.create [
                                       TextBlock.margin 8.0
                                       TextBlock.text (fmt2 "{0} ({1})" (t "downloads.upNext") upNext.Count)
                                       TextBlock.fontWeight FontWeight.SemiBold
                                     ]
                                     :> IView ]
-                                @ (upNext |> Seq.map (fun j -> jobRow svc j bump :> IView) |> Seq.toList)
+                                @ (upNext |> Seq.map (fun j -> jobRow svc j "upNext" bump :> IView) |> Seq.toList)
                                 @ [ DockPanel.create [
                                       DockPanel.margin 8.0
                                       DockPanel.children [
@@ -160,7 +206,7 @@ let view () =
                                       ]
                                     ]
                                     :> IView ]
-                                @ (done' |> Seq.map (fun j -> jobRow svc j bump :> IView) |> Seq.toList))
+                                @ (done' |> Seq.map (fun j -> jobRow svc j "done" bump :> IView) |> Seq.toList))
                         ])
                 ]
             ]

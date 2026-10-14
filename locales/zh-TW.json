@@ -67,6 +67,8 @@
   "downloads.corruptArchive": "壓縮檔已損毀。要重新下載嗎？",
   "downloads.extractFailed": "解壓縮失敗",
   "downloads.openLibrary": "開啟媒體庫",
+  "downloads.moveUp": "上移",
+  "downloads.moveDown": "下移",
   "launcher.multiExe": "找到多個執行檔。請選擇要執行的檔案",
   "launcher.alwaysUse": "之後一律執行此檔案",
   "launcher.launch": "啟動遊戲",

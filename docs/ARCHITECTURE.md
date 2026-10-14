@@ -31,7 +31,9 @@ SQLite under app data: purchases cache, fav/hide, install paths, exe choice, que
 
 - Background workers + channels; UI observes events only
 - External `7z` process for extract/test
-- Bounded concurrency; job failures do not kill process
+- Bounded concurrency via runtime-resizable gates; settings change updates download/extract slots + proxy without restart
+- Extract fail → `7z t`; corrupt/incomplete → re-download confirm; test OK → retry extract (skip re-download when cache present)
+- Job failures do not kill process
 
 ## Logging
 

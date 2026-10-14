@@ -19,11 +19,13 @@ public sealed class DownloadQueueService : IAsyncDisposable
     private readonly List<DownloadJob> _jobs = [];
     private readonly object _gate = new();
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _cts = new();
-    private readonly SemaphoreSlim _downloadSlots;
-    private readonly SemaphoreSlim _extractSlots;
+    private readonly ConcurrentDictionary<string, byte> _extractOnly = new();
+    private readonly ConcurrencyGate _downloadSlots;
+    private readonly ConcurrencyGate _extractSlots;
     private readonly Channel<string> _wake = Channel.CreateUnbounded<string>();
     private readonly Task _loop;
     private readonly CancellationTokenSource _runCts = new();
+    private long _lastProgressPersistTicks;
 
     public DownloadQueueService(
         DlsiteApiClient api,
@@ -39,8 +41,10 @@ public sealed class DownloadQueueService : IAsyncDisposable
         _library = library;
         _extractor = extractor;
         _logger = logger;
-        _downloadSlots = new SemaphoreSlim(Math.Max(1, settings.Current.MaxConcurrentDownloads));
-        _extractSlots = new SemaphoreSlim(Math.Max(1, settings.Current.MaxConcurrentExtracts));
+        _downloadSlots = new ConcurrencyGate(settings.Current.MaxConcurrentDownloads);
+        _extractSlots = new ConcurrencyGate(settings.Current.MaxConcurrentExtracts);
+        ApplyProxyFromSettings();
+        _settings.Changed += OnSettingsChanged;
         foreach (var j in db.LoadDownloadJobs())
         {
             if (j.State is DownloadJobState.Downloading or DownloadJobState.Extracting)
@@ -66,6 +70,12 @@ public sealed class DownloadQueueService : IAsyncDisposable
     public IReadOnlyList<DownloadJob> Completed =>
         Snapshot(j => j.State is DownloadJobState.Completed or DownloadJobState.Failed
             or DownloadJobState.CorruptArchive);
+
+    public bool HasCachedArchive(string workno)
+    {
+        var cacheDir = Path.Combine(_settings.Current.CacheDirectory, workno);
+        return ArchiveExtractor.FindPrimaryArchive(cacheDir) is not null;
+    }
 
     private List<DownloadJob> Snapshot(Func<DownloadJob, bool> pred)
     {
@@ -109,7 +119,7 @@ public sealed class DownloadQueueService : IAsyncDisposable
                     BytesTotal = w.ContentsFileSize
                 });
             }
-            Persist();
+            Persist(force: true);
         }
         Notify();
         _wake.Writer.TryWrite("enqueue");
@@ -125,7 +135,26 @@ public sealed class DownloadQueueService : IAsyncDisposable
                 var job = _jobs.FirstOrDefault(j => j.Workno == w);
                 if (job is not null) job.QueueOrder = i++;
             }
-            Persist();
+            Persist(force: true);
+        }
+        Notify();
+    }
+
+    public void MoveUpNext(string workno, int delta)
+    {
+        if (delta == 0) return;
+        lock (_gate)
+        {
+            var up = _jobs
+                .Where(j => j.State is DownloadJobState.Queued or DownloadJobState.Paused)
+                .OrderBy(j => j.QueueOrder)
+                .ToList();
+            var idx = up.FindIndex(j => j.Workno == workno);
+            if (idx < 0) return;
+            var nidx = Math.Clamp(idx + delta, 0, up.Count - 1);
+            if (nidx == idx) return;
+            (up[idx].QueueOrder, up[nidx].QueueOrder) = (up[nidx].QueueOrder, up[idx].QueueOrder);
+            Persist(force: true);
         }
         Notify();
     }
@@ -138,20 +167,24 @@ public sealed class DownloadQueueService : IAsyncDisposable
             var j = _jobs.FirstOrDefault(x => x.Workno == workno);
             if (j is not null && j.State == DownloadJobState.Downloading)
                 j.State = DownloadJobState.Paused;
-            Persist();
+            Persist(force: true);
         }
         Notify();
     }
 
     public void ResumeJob(string workno)
     {
+        _extractOnly.TryRemove(workno, out _);
         lock (_gate)
         {
             var j = _jobs.FirstOrDefault(x => x.Workno == workno);
             if (j is null) return;
             if (j.State is DownloadJobState.Paused or DownloadJobState.Failed)
+            {
                 j.State = DownloadJobState.Queued;
-            Persist();
+                j.ErrorMessage = null;
+            }
+            Persist(force: true);
         }
         Notify();
         _wake.Writer.TryWrite("resume");
@@ -162,13 +195,14 @@ public sealed class DownloadQueueService : IAsyncDisposable
         lock (_gate)
         {
             _jobs.RemoveAll(j => j.State is DownloadJobState.Completed);
-            Persist();
+            Persist(force: true);
         }
         Notify();
     }
 
     public void RequestRedownload(string workno)
     {
+        _extractOnly.TryRemove(workno, out _);
         var cacheDir = Path.Combine(_settings.Current.CacheDirectory, workno);
         try
         {
@@ -188,7 +222,7 @@ public sealed class DownloadQueueService : IAsyncDisposable
                 j.ProgressPercent = 0;
                 j.ErrorMessage = null;
             }
-            Persist();
+            Persist(force: true);
         }
         Notify();
         _wake.Writer.TryWrite("redownload");
@@ -196,19 +230,30 @@ public sealed class DownloadQueueService : IAsyncDisposable
 
     public void RequestRetryExtract(string workno)
     {
+        _extractOnly[workno] = 0;
         lock (_gate)
         {
             var j = _jobs.FirstOrDefault(x => x.Workno == workno);
             if (j is null) return;
             j.State = DownloadJobState.Queued;
             j.ErrorMessage = null;
-            j.ProgressPercent = 99;
-            Persist();
+            if (j.ProgressPercent < 99) j.ProgressPercent = 99;
+            Persist(force: true);
         }
-        // Mark a side flag via error message cleared; worker will skip download if cache complete
         Notify();
         _wake.Writer.TryWrite("retry-extract");
     }
+
+    private void OnSettingsChanged()
+    {
+        _downloadSlots.SetMax(_settings.Current.MaxConcurrentDownloads);
+        _extractSlots.SetMax(_settings.Current.MaxConcurrentExtracts);
+        ApplyProxyFromSettings();
+        _wake.Writer.TryWrite("settings");
+    }
+
+    private void ApplyProxyFromSettings() =>
+        _api.ConfigureProxy(_settings.Current.ProxyMode, _settings.Current.ProxyUrl);
 
     private async Task WorkerLoopAsync(CancellationToken ct)
     {
@@ -231,7 +276,6 @@ public sealed class DownloadQueueService : IAsyncDisposable
         foreach (var job in queued)
         {
             if (ct.IsCancellationRequested) break;
-            // fire-and-forget with slot limits
             _ = Task.Run(() => RunJobAsync(job.Workno, ct), ct);
         }
     }
@@ -241,18 +285,23 @@ public sealed class DownloadQueueService : IAsyncDisposable
         if (!_cts.TryAdd(workno, CancellationTokenSource.CreateLinkedTokenSource(ct)))
             return;
         var linked = _cts[workno];
+        var extractOnly = _extractOnly.TryRemove(workno, out _);
         try
         {
-            await _downloadSlots.WaitAsync(linked.Token).ConfigureAwait(false);
-            try
+            var skipDownload = extractOnly && HasCachedArchive(workno);
+            if (!skipDownload)
             {
-                SetState(workno, DownloadJobState.Downloading);
-                var ok = await DownloadWorkAsync(workno, linked.Token).ConfigureAwait(false);
-                if (!ok) return;
-            }
-            finally
-            {
-                _downloadSlots.Release();
+                await _downloadSlots.WaitAsync(linked.Token).ConfigureAwait(false);
+                try
+                {
+                    SetState(workno, DownloadJobState.Downloading);
+                    var ok = await DownloadWorkAsync(workno, linked.Token).ConfigureAwait(false);
+                    if (!ok) return;
+                }
+                finally
+                {
+                    _downloadSlots.Release();
+                }
             }
 
             await _extractSlots.WaitAsync(linked.Token).ConfigureAwait(false);
@@ -273,7 +322,7 @@ public sealed class DownloadQueueService : IAsyncDisposable
                 var j = _jobs.FirstOrDefault(x => x.Workno == workno);
                 if (j is not null && j.State != DownloadJobState.Paused)
                     j.State = DownloadJobState.Queued;
-                Persist();
+                Persist(force: true);
             }
             Notify();
         }
@@ -307,9 +356,9 @@ public sealed class DownloadQueueService : IAsyncDisposable
         {
             if (long.TryParse(f.FileSize, out var sz)) total += sz;
         }
-        UpdateJob(workno, j => j.BytesTotal = total > 0 ? total : j.BytesTotal);
+        UpdateJob(workno, j => j.BytesTotal = total > 0 ? total : j.BytesTotal, persist: true);
 
-        _api.ConfigureProxy(_settings.Current.ProxyMode, _settings.Current.ProxyUrl);
+        ApplyProxyFromSettings();
         using var client = _api.CreateDownloadClient();
         var limit = _settings.Current.RateLimitMBps;
 
@@ -318,7 +367,7 @@ public sealed class DownloadQueueService : IAsyncDisposable
             ct.ThrowIfCancellationRequested();
             var name = f.FileName ?? Path.GetFileName(new Uri(f.Url!).AbsolutePath);
             var dest = Path.Combine(cacheDir, name);
-            UpdateJob(workno, j => j.CurrentFileName = name);
+            UpdateJob(workno, j => j.CurrentFileName = name, persist: false);
             var existing = File.Exists(dest) ? new FileInfo(dest).Length : 0L;
             using var req = new HttpRequestMessage(HttpMethod.Get, f.Url);
             if (existing > 0)
@@ -359,7 +408,7 @@ public sealed class DownloadQueueService : IAsyncDisposable
                     {
                         j.BytesDownloaded = done;
                         j.ProgressPercent = Math.Min(99, pct);
-                    });
+                    }, persist: false);
                 }
                 if (limit > 0)
                 {
@@ -375,7 +424,7 @@ public sealed class DownloadQueueService : IAsyncDisposable
                 }
             }
         }
-        UpdateJob(workno, j => { j.BytesDownloaded = done; j.ProgressPercent = 99; });
+        UpdateJob(workno, j => { j.BytesDownloaded = done; j.ProgressPercent = 99; }, persist: true);
         return true;
     }
 
@@ -408,6 +457,7 @@ public sealed class DownloadQueueService : IAsyncDisposable
                 Fail(workno, message, DownloadJobState.CorruptArchive);
                 return;
             }
+            // test OK / tool missing / unknown → keep cache; UI offers retry extract
             Fail(workno, message, DownloadJobState.Failed);
             return;
         }
@@ -433,7 +483,7 @@ public sealed class DownloadQueueService : IAsyncDisposable
                 j.CompletedAt = DateTimeOffset.Now;
                 j.ErrorMessage = null;
             }
-            Persist();
+            Persist(force: true);
         }
         _library.Reload();
         Notify();
@@ -449,38 +499,56 @@ public sealed class DownloadQueueService : IAsyncDisposable
                 j.State = state;
                 j.ErrorMessage = message;
             }
-            Persist();
+            Persist(force: true);
         }
         Notify();
     }
 
     private void SetState(string workno, DownloadJobState state)
     {
-        UpdateJob(workno, j => j.State = state);
+        UpdateJob(workno, j => j.State = state, persist: true);
     }
 
-    private void UpdateJob(string workno, Action<DownloadJob> mutate)
+    private void UpdateJob(string workno, Action<DownloadJob> mutate, bool persist)
     {
         lock (_gate)
         {
             var j = _jobs.FirstOrDefault(x => x.Workno == workno);
             if (j is null) return;
             mutate(j);
-            Persist();
+            if (persist)
+                Persist(force: true);
+            else
+                Persist(force: false);
         }
         Notify();
     }
 
-    private void Persist() => _db.SaveDownloadJobs(_jobs);
+    private void Persist(bool force)
+    {
+        if (!force)
+        {
+            var now = Environment.TickCount64;
+            if (now - _lastProgressPersistTicks < 2000)
+                return;
+            _lastProgressPersistTicks = now;
+        }
+        else
+        {
+            _lastProgressPersistTicks = Environment.TickCount64;
+        }
+
+        _db.SaveDownloadJobs(_jobs);
+    }
+
     private void Notify() => Changed?.Invoke();
 
     public async ValueTask DisposeAsync()
     {
+        _settings.Changed -= OnSettingsChanged;
         _runCts.Cancel();
         _wake.Writer.TryComplete();
         try { await _loop.ConfigureAwait(false); } catch { /* ignore */ }
         _runCts.Dispose();
-        _downloadSlots.Dispose();
-        _extractSlots.Dispose();
     }
 }
