@@ -2,6 +2,7 @@ namespace DlsiteClient.App
 
 open System
 open System.Runtime.InteropServices
+open System.Threading
 open Avalonia
 open DlsiteClient.Core.Services
 open DlsiteClient.App.Services
@@ -14,8 +15,12 @@ module Program =
     let private showFatal (title: string) (msg: string) =
         MessageBoxW(0n, msg, title, 0x10u) |> ignore
 
+    // WebView2 needs STA. Without STAThread, .NET leaves main as MTA and
+    // NativeWebDialog CreateBuilder dies with COMException 0x80010106 (RPC_E_CHANGED_MODE).
+    [<STAThread>]
     [<EntryPoint>]
     let main argv =
+        ignore (Thread.CurrentThread.TrySetApartmentState ApartmentState.STA)
         try
             let svc = build argv
             Services.shared <- Some svc

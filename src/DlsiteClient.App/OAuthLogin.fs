@@ -20,6 +20,8 @@ let private mainWindow () : Window option =
         | _ -> None
 
 /// Nest OIDC via Avalonia WebAuthenticationBroker (MIT WebView >= 11.4.0).
+/// Nest redirect is https://www.dlsite.com/home/login (fragment) — needs NativeWebDialog / WebView2, not Browser loopback.
+/// Caller must not block the UI thread; Program.main must be STA for WebView2.
 let loginAsync (svc: AppServices) : Task<string> =
     task {
         match mainWindow () with
@@ -29,7 +31,11 @@ let loginAsync (svc: AppServices) : Task<string> =
                 let ui = svc.Settings.Current.UiLocale
                 if ui = "zh-TW" then "zh_TW" else "ja"
             let request = NestOidc.BuildAuthorizeUri(lang)
-            let options = WebAuthenticatorOptions(request, NestOidc.RedirectUri)
+            let options =
+                WebAuthenticatorOptions(
+                    request,
+                    NestOidc.RedirectUri,
+                    Mode = WebAuthenticatorMode.NativeWebDialog)
             try
                 let! result = WebAuthenticationBroker.AuthenticateAsync(owner, options)
                 match Option.ofObj result.CallbackUri with
