@@ -4,6 +4,8 @@ Cross-platform Nest replacement: **Avalonia.FuncUI (F#)** UI + **.NET 10** Core.
 
 Docs in [`docs/`](docs/) are the source of truth ([`AGENTS.md`](AGENTS.md)). Milestones **M0–M6** are complete ([`docs/MILESTONES.md`](docs/MILESTONES.md)).
 
+**License:** [MIT](LICENSE) · **Contributing:** [issues only — PRs are not accepted](CONTRIBUTING.md)
+
 ## Features
 
 - **Auth** — Nest OIDC via Avalonia WebAuthenticationBroker; SID in OS credential store; session expiry clears creds, pauses downloads, prompts re-login
