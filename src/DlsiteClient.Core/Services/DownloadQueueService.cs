@@ -497,13 +497,14 @@ public sealed class DownloadQueueService : IAsyncDisposable
         }
 
         var libRoot = _settings.Current.LibraryDirectory;
+        var contentRoot = LibraryService.ResolveContentRoot(libRoot);
         var work = _db.GetWork(workno);
         var maker = LibraryService.SanitizePathSegment(work?.MakerName);
         var title = LibraryService.SanitizePathSegment(work?.WorkName);
-        // Nest layout {maker}/{workName}; fall back to workno when metadata missing.
+        // Nest layout Game/{maker}/{workName} (or {maker}/{work} at root); fall back to workno.
         var dest = maker.Length > 0 && title.Length > 0
-            ? Path.Combine(libRoot, maker, title)
-            : Path.Combine(libRoot, workno);
+            ? Path.Combine(contentRoot, maker, title)
+            : Path.Combine(contentRoot, workno);
         if (Directory.Exists(dest))
         {
             try { Directory.Delete(dest, true); }

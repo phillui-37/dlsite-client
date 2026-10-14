@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using DlsiteClient.Core.Api;
 using DlsiteClient.Core.Models;
@@ -101,7 +102,7 @@ public sealed class LibraryService
     }
 
     /// <summary>
-    /// Match Nest layout {maker}/{workName} and legacy {workno} under LibraryDirectory.
+    /// Match Nest layout Game/{maker}/{workName} (and root {maker}/{workName}, {workno}).
     /// </summary>
     public async Task ReconcileLocalInstallsAsync(CancellationToken ct = default)
     {
@@ -122,10 +123,12 @@ public sealed class LibraryService
                 var found = ResolveInstallPath(libRoot, w);
                 if (found is not null)
                 {
+                    var localDate = ResolveLocalUpdateDate(w, found);
                     if (!w.IsDownloaded
-                        || !string.Equals(w.InstallPath, found, StringComparison.OrdinalIgnoreCase))
+                        || !string.Equals(w.InstallPath, found, StringComparison.OrdinalIgnoreCase)
+                        || !string.Equals(w.LocalUpdateDate, localDate, StringComparison.Ordinal))
                     {
-                        _db.SetDownloaded(w.Workno, true, found, w.LocalUpdateDate ?? w.UpdateDate);
+                        _db.SetDownloaded(w.Workno, true, found, localDate);
                         changed++;
                     }
                 }
@@ -142,28 +145,67 @@ public sealed class LibraryService
         Reload();
     }
 
+    /// <summary>
+    /// Nest stores works under {libraryDirectory}/Game. Fall back to library root when Game is absent.
+    /// </summary>
+    public static string ResolveContentRoot(string libRoot)
+    {
+        var game = Path.Combine(libRoot, "Game");
+        return Directory.Exists(game) ? game : libRoot;
+    }
+
+    public static IEnumerable<string> EnumerateContentRoots(string libRoot)
+    {
+        yield return libRoot;
+        var game = Path.Combine(libRoot, "Game");
+        if (Directory.Exists(game)
+            && !string.Equals(
+                Path.GetFullPath(game).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                Path.GetFullPath(libRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            yield return game;
+        }
+    }
+
     public static string? ResolveInstallPath(string libRoot, WorkItem w)
     {
         if (!string.IsNullOrWhiteSpace(w.InstallPath) && Directory.Exists(w.InstallPath))
             return w.InstallPath;
 
-        var byWorkno = Path.Combine(libRoot, w.Workno);
-        if (Directory.Exists(byWorkno))
-            return byWorkno;
-
         var maker = SanitizePathSegment(w.MakerName);
         var title = SanitizePathSegment(w.WorkName);
+
+        foreach (var root in EnumerateContentRoots(libRoot))
+        {
+            var found = ResolveInstallPathUnderRoot(root, w.Workno, maker, title);
+            if (found is not null)
+                return found;
+        }
+
+        return null;
+    }
+
+    private static string? ResolveInstallPathUnderRoot(string root, string workno, string maker, string title)
+    {
+        if (!string.IsNullOrWhiteSpace(workno))
+        {
+            var byWorkno = Path.Combine(root, workno);
+            if (Directory.Exists(byWorkno))
+                return byWorkno;
+        }
+
         if (maker.Length == 0 || title.Length == 0)
             return null;
 
-        var nestPath = Path.Combine(libRoot, maker, title);
+        var nestPath = Path.Combine(root, maker, title);
         if (Directory.Exists(nestPath))
             return nestPath;
 
         // Case-insensitive walk when exact combine misses (rare path normalization).
         try
         {
-            foreach (var makerDir in Directory.EnumerateDirectories(libRoot))
+            foreach (var makerDir in Directory.EnumerateDirectories(root))
             {
                 if (!string.Equals(Path.GetFileName(makerDir), maker, StringComparison.OrdinalIgnoreCase))
                     continue;
@@ -193,6 +235,50 @@ public sealed class LibraryService
                 chars[i] = '_';
         }
         return new string(chars).TrimEnd('.', ' ');
+    }
+
+    /// <summary>
+    /// Local revision for HasUpdate. Keep a real stamp; never assume Nest imports equal remote update_date.
+    /// </summary>
+    public static string? ResolveLocalUpdateDate(WorkItem w, string installPath)
+    {
+        var inferred = InferDirectoryStamp(installPath);
+        if (string.IsNullOrWhiteSpace(w.LocalUpdateDate))
+            return inferred;
+
+        // Prior detect bug stamped LocalUpdateDate = UpdateDate. If folder is older, trust folder.
+        if (string.Equals(w.LocalUpdateDate, w.UpdateDate, StringComparison.Ordinal)
+            && !string.IsNullOrWhiteSpace(w.UpdateDate)
+            && !string.IsNullOrWhiteSpace(inferred)
+            && WorkItem.TryParseNestDate(w.UpdateDate, out var remote)
+            && WorkItem.TryParseNestDate(inferred, out var folder)
+            && folder < remote)
+        {
+            return inferred;
+        }
+
+        return w.LocalUpdateDate;
+    }
+
+    /// <summary>Max LastWriteTime among install root entries, Nest-shaped local timestamp.</summary>
+    public static string? InferDirectoryStamp(string path)
+    {
+        try
+        {
+            var dir = new DirectoryInfo(path);
+            if (!dir.Exists) return null;
+            var max = dir.LastWriteTime;
+            foreach (var entry in dir.EnumerateFileSystemInfos())
+            {
+                if (entry.LastWriteTime > max)
+                    max = entry.LastWriteTime;
+            }
+            return max.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     public async Task EnsureWorkTypeNamesAsync(CancellationToken ct = default)

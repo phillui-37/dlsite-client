@@ -10,13 +10,13 @@ Nest replacement. Windows first; UI must stay cross-platform capable.
 - Modes: list (selectable sortable columns), grid (thumb + title), hybrid
 - Columns: purchase date, title+thumb (fixed), maker, work format, store rating as text `x/5` (default `0/5`, no stars), sales date, download flag only, extract size separate; **no Viewer**
 - **Paging:** default page size 20; user may choose 50 or 100
-- Explicit Update button when update exists (all modes)
+- Explicit Update button when update exists (all modes). Update = purchase `update_date` newer than local revision stamp (`LocalUpdateDate`). Our extracts stamp on finish; Nest-imported folders infer stamp from install folder mtime (never assume equal to remote `update_date`).
 - Context menu: install / uninstall / fav / hide
 - Multi-select: batch Download, Update, Uninstall (confirm)
 - Double-click → detail page
 - Search: fuzzy title + maker only
 - Metadata + thumbnails load **off the UI thread**; placeholders/skeletons until ready; thumbs fill in as fetches complete
-- **Local install detect:** reconcile library folder against purchases. Nest layout is `{makerName}/{workName}`; also accept our `{workno}` folder. Run after purchase sync and on library view boot (off UI thread). Downloaded column header must fit full i18n label (no clip).
+- **Local install detect:** reconcile library folder against purchases. Nest layout is `{libraryDirectory}/Game/{makerName}/{workName}` (also accept `{makerName}/{workName}` and `{workno}` at the library root). Run after purchase sync and on library view boot (off UI thread). Downloaded column header must fit full i18n label (no clip).
 
 ## Tags
 

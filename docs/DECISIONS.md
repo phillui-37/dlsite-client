@@ -87,11 +87,13 @@
 
 ## ADR-017: Nest library folder layout
 
-- **Status:** Accepted (2026-10-15)
-- Observed Nest `libraryDirectory` tree: `{makerName}/{workName}/` (empty maker dirs ignored).
-- Detect installs by matching purchase `MakerName` + `WorkName` (case-insensitive on Windows; strip invalid path chars). Also accept `{workno}/` from our older extracts.
-- New extracts write Nest layout `{maker}/{work}` so Nest and this client share one tree.
+- **Status:** Accepted (2026-10-15), corrected same day
+- Nest `libraryDirectory` (e.g. `D:\DLNest`) is the **parent** of content. Observed tree: `{libraryDirectory}/Game/{makerName}/{workName}/` (cache sibling dirs ignored).
+- Detect installs under `Game/` and also at the library root (`{maker}/{work}`, `{workno}`) for older / non-Nest trees.
+- Match purchase `MakerName` + `WorkName` (case-insensitive on Windows; strip invalid path chars).
+- New extracts: if `{libraryDirectory}/Game` exists, write `{Game}/{maker}/{work}`; else `{libraryDirectory}/{maker}/{work}`.
 - Stale `IsDownloaded` cleared when no matching folder remains.
+- **Local revision:** do not set `LocalUpdateDate = UpdateDate` on detect (that hid Nest updates). Infer from install-folder mtime; `HasUpdate` is remote `update_date` **after** local stamp. Extracts still stamp `UpdateDate` on success.
 
 ## ADR-018: Session expiry handling (M6)
 
