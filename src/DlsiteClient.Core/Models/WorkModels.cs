@@ -54,10 +54,37 @@ public sealed class WorkItem
         }
     }
 
-    public bool HasUpdate =>
-        IsDownloaded
-        && !string.IsNullOrEmpty(UpdateDate)
-        && !string.Equals(UpdateDate, LocalUpdateDate, StringComparison.Ordinal);
+    /// <summary>
+    /// True when installed and purchase <c>update_date</c> is newer than the local revision stamp.
+    /// Missing local stamp ⇒ treat as outdated (Nest import / unknown).
+    /// </summary>
+    public bool HasUpdate
+    {
+        get
+        {
+            if (!IsDownloaded || string.IsNullOrWhiteSpace(UpdateDate))
+                return false;
+            if (string.IsNullOrWhiteSpace(LocalUpdateDate))
+                return true;
+            if (TryParseNestDate(UpdateDate, out var remote)
+                && TryParseNestDate(LocalUpdateDate, out var local))
+                return remote > local;
+            return !string.Equals(UpdateDate, LocalUpdateDate, StringComparison.Ordinal);
+        }
+    }
+
+    internal static bool TryParseNestDate(string value, out DateTime dt) =>
+        DateTime.TryParseExact(
+            value.Trim(),
+            ["yyyy-MM-dd HH:mm:ss", "yyyy-MM-ddTHH:mm:ss", "yyyy-MM-dd"],
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AssumeLocal,
+            out dt)
+        || DateTime.TryParse(
+            value,
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AssumeLocal,
+            out dt);
 }
 
 public sealed class AppSettings
