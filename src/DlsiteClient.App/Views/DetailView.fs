@@ -1,16 +1,17 @@
 module DlsiteClient.App.Views.DetailView
 
 open System
-open System.Text.Json
 open Avalonia.Controls
 open Avalonia.Layout
 open Avalonia.Media
 open Avalonia.FuncUI
 open Avalonia.FuncUI.DSL
 open Avalonia.FuncUI.Types
+open DlsiteClient.Core.Services
 open DlsiteClient.App.Localization
 open DlsiteClient.App.Services
 open DlsiteClient.App.Fmt
+open DlsiteClient.App.ThumbCache
 
 let private orDash (s: string) =
     if String.IsNullOrEmpty s then "-" else s
@@ -28,23 +29,18 @@ let view (workno: string) (onBack: unit -> unit) =
         | None ->
             StackPanel.create [
                 StackPanel.children [
-                    Button.create [ Button.content "Back"; Button.onClick (fun _ -> onBack ()) ]
-                    TextBlock.create [ TextBlock.text "Not found" ]
+                    Button.create [ Button.content (t "common.back"); Button.onClick (fun _ -> onBack ()) ]
+                    TextBlock.create [ TextBlock.text (t "detail.notFound") ]
                 ]
             ]
         | Some w ->
-            let tags =
-                try
-                    match JsonSerializer.Deserialize<string[]>(w.TagsJson) with
-                    | null -> []
-                    | arr -> Array.toList arr
-                with _ -> []
+            let tags = LibraryService.ParseTags(w.TagsJson) |> Seq.toList
 
             DockPanel.create [
                 DockPanel.children [
                     Button.create [
                         DockPanel.dock Dock.Top
-                        Button.content "Back"
+                        Button.content (t "common.back")
                         Button.margin 8.0
                         Button.onClick (fun _ -> onBack ())
                     ]
@@ -54,6 +50,20 @@ let view (workno: string) (onBack: unit -> unit) =
                                 StackPanel.margin 16.0
                                 StackPanel.spacing 8.0
                                 StackPanel.children [
+                                    match tryGet (if isNull w.ThumbUrl then "" else w.ThumbUrl) with
+                                    | Some bmp ->
+                                        Image.create [
+                                            Image.source bmp
+                                            Image.width 240.0
+                                            Image.height 240.0
+                                            Image.stretch Stretch.Uniform
+                                        ]
+                                    | None ->
+                                        Border.create [
+                                            Border.width 240.0
+                                            Border.height 240.0
+                                            Border.background "#E5E7EB"
+                                        ]
                                     TextBlock.create [
                                         TextBlock.text w.WorkName
                                         TextBlock.fontSize 24.0
