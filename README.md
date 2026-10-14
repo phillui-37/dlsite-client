@@ -8,7 +8,7 @@ Avalonia.FuncUI (F#) + .NET 10 Nest replacement. Docs in `docs/` are the source 
 .\scripts\build.ps1
 .\scripts\publish-aot.ps1          # needs VS C++ / vcvars64
 .\scripts\publish-msi.ps1          # WiX MSI wizard over AOT payload
-dotnet run --project src/DlsiteClient.App -c Release
+dotnet run --project src/DlsiteClient.App -c Release -f net10.0-windows
 ```
 
 See [`docs/PACKAGING.md`](docs/PACKAGING.md). Linux AppImage is M5+ backlog.
