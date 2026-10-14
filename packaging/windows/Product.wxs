@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- WiX 4/5 installer for DLsite Client (AOT payload from artifacts/aot-win-x64). -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="DLsite Client"
+    Manufacturer="DlsiteClient"
+    Version="0.1.0"
+    UpgradeCode="A7C3E2B1-5D4F-4A8E-9C21-0F6B8D3E1A42"
+    Scope="perUser"
+    Compressed="yes">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Feature Id="Main" Title="DLsite Client" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="DesktopShortcut" />
+    </Feature>
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="InstallFolder" Name="DlsiteClient" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ProgramMenuDir" Name="Dlsite Client" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder" />
+
+    <ComponentGroup Id="AppFiles" Directory="InstallFolder">
+      <Component Id="MainExe" Guid="*">
+        <File Id="AppExe" Source="!(bindpath.app)\DlsiteClient.App.exe" KeyPath="yes" />
+      </Component>
+      <Component Id="NativeGles" Guid="*">
+        <File Source="!(bindpath.app)\av_libglesv2.dll" />
+      </Component>
+      <Component Id="NativeSqlite" Guid="*">
+        <File Source="!(bindpath.app)\e_sqlite3.dll" />
+      </Component>
+      <Component Id="NativeHarfBuzz" Guid="*">
+        <File Source="!(bindpath.app)\libHarfBuzzSharp.dll" />
+      </Component>
+      <Component Id="NativeSkia" Guid="*">
+        <File Source="!(bindpath.app)\libSkiaSharp.dll" />
+      </Component>
+      <Component Id="LocaleJa" Guid="*" Directory="LocaleDir">
+        <File Source="!(bindpath.app)\locales\ja.json" />
+      </Component>
+      <Component Id="LocaleZhTw" Guid="*" Directory="LocaleDir">
+        <File Source="!(bindpath.app)\locales\zh-TW.json" />
+      </Component>
+    </ComponentGroup>
+
+    <DirectoryRef Id="InstallFolder">
+      <Directory Id="LocaleDir" Name="locales" />
+    </DirectoryRef>
+
+    <Component Id="StartMenuShortcut" Directory="ProgramMenuDir" Guid="*">
+      <Shortcut
+        Id="StartMenuShortcut"
+        Name="DLsite Client"
+        Target="[InstallFolder]DlsiteClient.App.exe"
+        WorkingDirectory="InstallFolder" />
+      <RemoveFolder Id="RemoveProgramMenuDir" On="uninstall" />
+      <RegistryValue Root="HKCU" Key="Software\DlsiteClient" Name="Installed" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <Component Id="DesktopShortcut" Directory="DesktopFolder" Guid="*">
+      <Shortcut
+        Id="DesktopShortcut"
+        Name="DLsite Client"
+        Target="[InstallFolder]DlsiteClient.App.exe"
+        WorkingDirectory="InstallFolder" />
+      <RegistryValue Root="HKCU" Key="Software\DlsiteClient" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+  </Package>
+</Wix>

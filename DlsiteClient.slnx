@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DlsiteClient.App/DlsiteClient.App.fsproj" />
+    <Project Path="src/DlsiteClient.Core/DlsiteClient.Core.csproj" />
+    <Project Path="src/DlsiteClient.Platform.Linux/DlsiteClient.Platform.Linux.csproj" />
+    <Project Path="src/DlsiteClient.Platform.Windows/DlsiteClient.Platform.Windows.csproj" />
+    <Project Path="src/DlsiteClient.Platform/DlsiteClient.Platform.csproj" />
+  </Folder>
+</Solution>

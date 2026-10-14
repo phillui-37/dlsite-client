@@ -1,0 +1,206 @@
+module DlsiteClient.App.Views.SettingsView
+
+open System
+open Avalonia.Controls
+open Avalonia.Layout
+open Avalonia.Media
+open Avalonia.FuncUI
+open Avalonia.FuncUI.DSL
+open Avalonia.FuncUI.Types
+open DlsiteClient.App.Localization
+open DlsiteClient.App.Services
+open DlsiteClient.Platform
+
+let view () =
+    Component(fun ctx ->
+        let svc = get ()
+        let s0 = svc.Settings.Current
+        let lib = ctx.useState s0.LibraryDirectory
+        let cache = ctx.useState s0.CacheDirectory
+        let logPath = ctx.useState s0.LogDirectory
+        let logLevel = ctx.useState s0.LogLevel
+        let locale = ctx.useState s0.UiLocale
+        let maxDl = ctx.useState (string s0.MaxConcurrentDownloads)
+        let maxEx = ctx.useState (string s0.MaxConcurrentExtracts)
+        let rate = ctx.useState (string s0.RateLimitMBps)
+        let proxyMode = ctx.useState s0.ProxyMode
+        let proxyUrl = ctx.useState (if isNull s0.ProxyUrl then "" else s0.ProxyUrl)
+        let startLogin = ctx.useState s0.StartOnLogin
+        let status = ctx.useState ""
+        let sidInput = ctx.useState ""
+
+        let save () =
+            svc.Settings.Update(fun s ->
+                s.LibraryDirectory <- lib.Current
+                s.CacheDirectory <- cache.Current
+                s.LogDirectory <- logPath.Current
+                s.LogLevel <- logLevel.Current
+                s.UiLocale <- locale.Current
+                s.ApiLocale <- if locale.Current = "zh-TW" then "zh_TW" else "ja_JP"
+                s.MaxConcurrentDownloads <-
+                    match Int32.TryParse maxDl.Current with
+                    | true, v -> max 1 v
+                    | _ -> 2
+                s.MaxConcurrentExtracts <-
+                    match Int32.TryParse maxEx.Current with
+                    | true, v -> max 1 v
+                    | _ -> 1
+                s.RateLimitMBps <-
+                    match Double.TryParse rate.Current with
+                    | true, v -> max 0.0 v
+                    | _ -> 0.0
+                s.ProxyMode <- proxyMode.Current
+                s.ProxyUrl <- if String.IsNullOrWhiteSpace proxyUrl.Current then null else proxyUrl.Current
+                s.StartOnLogin <- startLogin.Current)
+            svc.Startup.SetEnabled startLogin.Current
+            globalI18n.Load(locale.Current, svc.LocalesDir)
+            status.Set "OK"
+
+        ScrollViewer.create [
+            ScrollViewer.content (
+                StackPanel.create [
+                    StackPanel.margin 16.0
+                    StackPanel.spacing 10.0
+                    StackPanel.children [
+                        TextBlock.create [
+                            TextBlock.text (t "settings.account")
+                            TextBlock.fontSize 18.0
+                            TextBlock.fontWeight FontWeight.Bold
+                        ]
+                        TextBlock.create [
+                            TextBlock.text (
+                                if svc.Auth.IsLoggedIn then
+                                    let id = svc.Auth.LoginId
+                                    if isNull id || id = "" then "SID OK" else id
+                                else
+                                    t "auth.login")
+                        ]
+                        TextBox.create [
+                            TextBox.watermark "__DLsite_SID"
+                            TextBox.text sidInput.Current
+                            TextBox.onTextChanged sidInput.Set
+                        ]
+                        StackPanel.create [
+                            StackPanel.orientation Orientation.Horizontal
+                            StackPanel.spacing 8.0
+                            StackPanel.children [
+                                Button.create [
+                                    Button.content (t "auth.login")
+                                    Button.onClick (fun _ ->
+                                        if not (String.IsNullOrWhiteSpace sidInput.Current) then
+                                            svc.Auth.ApplyLoginAsync(sidInput.Current.Trim(), null)
+                                                .GetAwaiter().GetResult()
+                                            status.Set "login ok")
+                                ]
+                                Button.create [
+                                    Button.content (t "auth.logout")
+                                    Button.onClick (fun _ ->
+                                        svc.Auth.LogoutAsync().GetAwaiter().GetResult()
+                                        status.Set "logout")
+                                ]
+                                Button.create [
+                                    Button.content "Sync"
+                                    Button.onClick (fun _ ->
+                                        try
+                                            svc.Library.SyncPurchasesAsync().GetAwaiter().GetResult()
+                                            status.Set "synced"
+                                        with ex -> status.Set ex.Message)
+                                ]
+                            ]
+                        ]
+
+                        TextBlock.create [
+                            TextBlock.text (t "settings.environment")
+                            TextBlock.fontSize 18.0
+                            TextBlock.fontWeight FontWeight.Bold
+                        ]
+                        TextBlock.create [ TextBlock.text (t "settings.libraryFolder") ]
+                        TextBox.create [ TextBox.text lib.Current; TextBox.onTextChanged lib.Set ]
+                        TextBlock.create [ TextBlock.text (t "settings.cacheFolder") ]
+                        TextBox.create [ TextBox.text cache.Current; TextBox.onTextChanged cache.Set ]
+                        CheckBox.create [
+                            CheckBox.content (t "settings.startOnLogin")
+                            CheckBox.isChecked startLogin.Current
+                            CheckBox.onChecked (fun _ -> startLogin.Set true)
+                            CheckBox.onUnchecked (fun _ -> startLogin.Set false)
+                        ]
+
+                        TextBlock.create [ TextBlock.text (t "settings.language") ]
+                        ComboBox.create [
+                            ComboBox.dataItems [ "ja"; "zh-TW" ]
+                            ComboBox.selectedItem locale.Current
+                            ComboBox.onSelectedItemChanged (fun o ->
+                                match o with
+                                | :? string as s -> locale.Set s
+                                | _ -> ())
+                        ]
+
+                        TextBlock.create [
+                            TextBlock.text (t "settings.download")
+                            TextBlock.fontSize 18.0
+                            TextBlock.fontWeight FontWeight.Bold
+                        ]
+                        TextBlock.create [ TextBlock.text (t "settings.maxDownloads") ]
+                        TextBox.create [ TextBox.text maxDl.Current; TextBox.onTextChanged maxDl.Set ]
+                        TextBlock.create [ TextBlock.text (t "settings.maxExtracts") ]
+                        TextBox.create [ TextBox.text maxEx.Current; TextBox.onTextChanged maxEx.Set ]
+                        TextBlock.create [ TextBlock.text (t "settings.rateLimit") ]
+                        TextBox.create [ TextBox.text rate.Current; TextBox.onTextChanged rate.Set ]
+                        TextBlock.create [ TextBlock.text (t "settings.proxy") ]
+                        ComboBox.create [
+                            ComboBox.dataItems [ "off"; "system"; "custom" ]
+                            ComboBox.selectedItem proxyMode.Current
+                            ComboBox.onSelectedItemChanged (fun o ->
+                                match o with
+                                | :? string as s -> proxyMode.Set s
+                                | _ -> ())
+                        ]
+                        TextBox.create [
+                            TextBox.watermark "http://host:port"
+                            TextBox.text proxyUrl.Current
+                            TextBox.onTextChanged proxyUrl.Set
+                        ]
+
+                        TextBlock.create [
+                            TextBlock.text (t "settings.logging")
+                            TextBlock.fontSize 18.0
+                            TextBlock.fontWeight FontWeight.Bold
+                        ]
+                        TextBlock.create [ TextBlock.text (t "settings.logLevel") ]
+                        ComboBox.create [
+                            ComboBox.dataItems
+                                [ "Verbose"; "Debug"; "Information"; "Warning"; "Error"; "Fatal" ]
+                            ComboBox.selectedItem logLevel.Current
+                            ComboBox.onSelectedItemChanged (fun o ->
+                                match o with
+                                | :? string as s -> logLevel.Set s
+                                | _ -> ())
+                        ]
+                        TextBlock.create [ TextBlock.text (t "settings.logPath") ]
+                        TextBox.create [ TextBox.text logPath.Current; TextBox.onTextChanged logPath.Set ]
+                        Button.create [
+                            Button.content (t "settings.open")
+                            Button.onClick (fun _ -> svc.Shell.OpenFolder logPath.Current)
+                        ]
+
+                        Button.create [
+                            Button.content (t "settings.nestImportTitle")
+                            Button.onClick (fun _ ->
+                                let mutable paths: NestPathImport = Unchecked.defaultof<_>
+                                if svc.NestImport.TryReadPaths(&paths) && not (isNull (box paths)) then
+                                    lib.Set paths.LibraryDirectory
+                                    cache.Set paths.CacheDirectory
+                                    svc.Settings.Update(fun s -> s.NestImportAsked <- true)
+                                    status.Set (t "settings.nestImport")
+                                else
+                                    status.Set "Nest settings not found")
+                        ]
+
+                        Button.create [
+                            Button.content (t "common.ok")
+                            Button.onClick (fun _ -> save ())
+                        ]
+                        TextBlock.create [ TextBlock.text status.Current ]
+                    ]
+                ])
+        ])

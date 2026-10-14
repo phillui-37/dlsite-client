@@ -1,0 +1,15 @@
+bin/
+obj/
+artifacts/
+.vs/
+*.user
+*.suo
+*.userPrefs
+publish/
+artifacts/
+*.db
+*.db-shm
+*.db-wal
+.idea/
+*.user
+*.DotSettings.user

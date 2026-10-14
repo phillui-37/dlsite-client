@@ -1,0 +1,55 @@
+# Requirements — DLsite Client
+
+Nest replacement. Windows first; UI must stay cross-platform capable.
+
+## Library
+
+- Filters: All / Games / Images / Videos / Audio / Other + work-type checkboxes; fav / hidden / downloaded; tag filter when tags exist
+- Modes: list (selectable sortable columns), grid (thumb + title), hybrid
+- Columns: purchase date, title+thumb (fixed), maker, work format, store rating as text `x/5` (default `0/5`, no stars), sales date, download flag only, extract size separate; **no Viewer**
+- Explicit Update button when update exists (all modes)
+- Context menu: install / uninstall / fav / hide
+- Multi-select: batch Download, Update, Uninstall (confirm)
+- Double-click → detail page
+- Search: fuzzy title + maker only
+
+## Tags
+
+- Prefer Nest `Product.tags`; fallback `product.json` genres; HTML scrape last resort with geo-block soft-fail
+- Never block library/download on tag fetch
+
+## DLC
+
+- Probe Nest + `product.json` for parent/DLC; if no clean signal, **ignore feature** (no scrape)
+
+## Downloads (in-window tab)
+
+- Steam-like: Active / Up Next (manual reorder) / Completed — no Nest popup window
+- Cache download with HTTP Range resume; extract to library; delete related cache
+- zip / rar / 7z + split archives via external 7z
+- Concurrent download/extract caps; extract default concurrency 1
+- DL fail → resume; extract fail → integrity test (`7z t`); corrupt → re-download; OK → retry extract
+- Rate limit + HTTP(S) proxy in settings
+- UI must not crash on large queues / big extracts
+
+## Launcher
+
+- Scan EXEs; multi-exe picker + “always use”; persist per workno
+- Protocol `dlsite-client://play/{workno}`
+- Per-work Japan locale launch flag
+
+## Settings
+
+- Logout, cache/game folders, start on Windows login
+- UI language ja / zh-TW (locale JSON files)
+- Download concurrency, rate limit, proxy
+- Log level + log path; rotation fixed in app (not user-configurable)
+- Nest path import confirm-only (no credentials)
+
+## Auth
+
+- OAuth on login.dlsite.com → Nest login POST → store SID in OS credentials
+
+## i18n
+
+- ja + zh-TW; strings only in `locales/*.json`

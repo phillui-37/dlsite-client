@@ -1,0 +1,48 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <!-- Override: -p:PublishAot=true|false. AOT needs vcvars64 / VS C++ Desktop. -->
+    <PublishAot Condition="'$(PublishAot)' == ''">true</PublishAot>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>partial</TrimMode>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <RootNamespace>DlsiteClient.App</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Fmt.fs" />
+    <Compile Include="Localization.fs" />
+    <Compile Include="Services.fs" />
+    <Compile Include="Views/LibraryView.fs" />
+    <Compile Include="Views/DownloadsView.fs" />
+    <Compile Include="Views/SettingsView.fs" />
+    <Compile Include="Views/DetailView.fs" />
+    <Compile Include="Views/MainView.fs" />
+    <Compile Include="App.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DlsiteClient.Core\DlsiteClient.Core.csproj" />
+    <ProjectReference Include="..\DlsiteClient.Platform\DlsiteClient.Platform.csproj" />
+    <ProjectReference Include="..\DlsiteClient.Platform.Windows\DlsiteClient.Platform.Windows.csproj" />
+    <ProjectReference Include="..\DlsiteClient.Platform.Linux\DlsiteClient.Platform.Linux.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.2" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.2" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.2" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.2" />
+    <PackageReference Include="Avalonia.FuncUI" Version="1.5.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" />
+    <PackageReference Include="Serilog" Version="4.3.0" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="9.0.2" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\..\locales\**\*" Link="locales\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
