@@ -73,3 +73,10 @@
 - Per-work flag sets child `LANG` / `LC_ALL` to `ja_JP.UTF-8`.
 - Full Windows AppLocale / Locale Emulator is out of scope (OS-dependent, not FOSS-bundled).
 - Protocol `dlsite-client://play/{workno}`: launch immediately when exe is known; if multi-exe needs a pick, open the work detail picker instead of failing closed.
+
+## ADR-016: UI never blocks on IO
+
+- **Status:** Accepted (post-M4 hotfix)
+- Root cause of library freeze after login: sync thumbnail HTTP via `.GetResult()` while building hundreds of rows on the UI thread.
+- Rule: all network/disk/credential/sync IO goes through `UiAsync` (or existing background services). Views only bind state and post UI updates.
+- Library paging default **20** (options 50/100). Settings apply on change (no Confirm). Filters collapsed until expanded. Work-type labels from Nest API + locale fallback.

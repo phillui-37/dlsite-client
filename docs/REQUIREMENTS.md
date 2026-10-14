@@ -5,13 +5,17 @@ Nest replacement. Windows first; UI must stay cross-platform capable.
 ## Library
 
 - Filters: All / Games / Images / Videos / Audio / Other + work-type checkboxes; fav / hidden / downloaded; tag filter when tags exist
+- Filter chrome stays **collapsed by default**; expand only when the user opens a section (work types, columns, advanced filters)
+- Work-type codes shown via i18n / Nest work-type names (never raw-only when a label exists)
 - Modes: list (selectable sortable columns), grid (thumb + title), hybrid
 - Columns: purchase date, title+thumb (fixed), maker, work format, store rating as text `x/5` (default `0/5`, no stars), sales date, download flag only, extract size separate; **no Viewer**
+- **Paging:** default page size 20; user may choose 50 or 100
 - Explicit Update button when update exists (all modes)
 - Context menu: install / uninstall / fav / hide
 - Multi-select: batch Download, Update, Uninstall (confirm)
 - Double-click → detail page
 - Search: fuzzy title + maker only
+- Metadata + thumbnails load **off the UI thread**; placeholders/skeletons until ready; thumbs fill in as fetches complete
 
 ## Tags
 
@@ -45,6 +49,7 @@ Nest replacement. Windows first; UI must stay cross-platform capable.
 - Download concurrency, rate limit, proxy
 - Log level + log path; rotation fixed in app (not user-configurable)
 - Nest path import confirm-only (no credentials)
+- **Apply changes immediately** (no separate Confirm / OK); network/IO from settings must not block the UI thread
 
 ## Auth
 

@@ -35,6 +35,13 @@ SQLite under app data: purchases cache, fav/hide, install paths, exe choice, que
 - Extract fail → `7z t`; corrupt/incomplete → re-download confirm; test OK → retry extract (skip re-download when cache present)
 - Job failures do not kill process
 
+## UI thread / IO
+
+- **Never** block the Avalonia UI thread on network, disk walk, credential vault, or SQLite-heavy sync (no `.GetResult()` / `.Wait()` / sync HTTP from views)
+- Use `DlsiteClient.App.UiAsync` to run work off-UI and marshal results back with `Dispatcher.UIThread.Post`
+- Thumbnails: async cache + placeholder/skeleton; notify UI when a bitmap arrives
+- Library list is paged; do not materialize thousands of row visuals at once
+
 ## Logging
 
 Microsoft.Extensions.Logging + file sink with fixed rotation; user sets level + directory only.

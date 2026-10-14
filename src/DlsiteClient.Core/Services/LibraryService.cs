@@ -14,6 +14,7 @@ public sealed class LibraryService
     private readonly SettingsService _settings;
     private readonly ILogger<LibraryService> _logger;
     private List<WorkItem> _cache = [];
+    private readonly Dictionary<string, string> _workTypeNames = new(StringComparer.OrdinalIgnoreCase);
     private bool _dlcFeatureEnabled;
     private bool _tagsFromProductJson;
 
@@ -83,8 +84,37 @@ public sealed class LibraryService
         }
 
         _db.UpsertWorks(mapped);
+        await EnsureWorkTypeNamesAsync(ct).ConfigureAwait(false);
         await EnrichSampleMetadataAsync(mapped.Take(5).ToList(), ct).ConfigureAwait(false);
         Reload();
+    }
+
+    public async Task EnsureWorkTypeNamesAsync(CancellationToken ct = default)
+    {
+        if (_workTypeNames.Count > 0) return;
+        try
+        {
+            var types = await _api.GetWorkTypesAsync(_settings.Current.ApiLocale, ct).ConfigureAwait(false);
+            foreach (var wt in types)
+            {
+                if (string.IsNullOrWhiteSpace(wt.Value)) continue;
+                var name = !string.IsNullOrWhiteSpace(wt.Name) ? wt.Name! : wt.Value!;
+                _workTypeNames[wt.Value!] = name;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load Nest work-type names");
+        }
+    }
+
+    /// <summary>Localized Nest name when available; otherwise the raw code.</summary>
+    public string WorkTypeDisplay(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return "-";
+        return _workTypeNames.TryGetValue(code, out var name) && !string.IsNullOrWhiteSpace(name)
+            ? name
+            : code;
     }
 
     private async Task EnrichSampleMetadataAsync(List<WorkItem> sample, CancellationToken ct)
@@ -309,13 +339,19 @@ public sealed class LibraryService
         Reload();
     }
 
-    public void MarkUninstalled(string workno)
+    public async Task MarkUninstalledAsync(string workno, CancellationToken ct = default)
     {
         var w = _db.GetWork(workno);
         if (w?.InstallPath is { } path && Directory.Exists(path))
         {
-            try { Directory.Delete(path, true); }
-            catch (Exception ex) { _logger.LogWarning(ex, "Uninstall delete failed for {Path}", path); }
+            try
+            {
+                await Task.Run(() => Directory.Delete(path, true), ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Uninstall delete failed for {Path}", path);
+            }
         }
         _db.SetDownloaded(workno, false, null, null);
         _db.SetSelectedExe(workno, null, w?.UseJapanLocale ?? false);

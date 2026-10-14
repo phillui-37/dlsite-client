@@ -77,6 +77,8 @@ public sealed class AppSettings
     public LibraryViewMode ViewMode { get; set; } = LibraryViewMode.List;
     public string VisibleColumns { get; set; } =
         "purchaseDate,title,maker,workType,rating,salesDate,downloaded,extractSize,update";
+    /// <summary>Library page size: 20 (default), 50, or 100.</summary>
+    public int LibraryPageSize { get; set; } = 20;
     public bool NestImportAsked { get; set; }
 }
 

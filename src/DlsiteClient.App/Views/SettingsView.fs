@@ -1,11 +1,9 @@
 module DlsiteClient.App.Views.SettingsView
 
 open System
-open System.Threading.Tasks
 open Avalonia.Controls
 open Avalonia.Layout
 open Avalonia.Media
-open Avalonia.Threading
 open Avalonia.FuncUI
 open Avalonia.FuncUI.DSL
 open Avalonia.FuncUI.Types
@@ -13,6 +11,7 @@ open DlsiteClient.App.Localization
 open DlsiteClient.App.NestImportPrompt
 open DlsiteClient.App.OAuthLogin
 open DlsiteClient.App.Services
+open DlsiteClient.App.UiAsync
 open DlsiteClient.Platform
 
 let view () =
@@ -32,15 +31,33 @@ let view () =
         let startLogin = ctx.useState s0.StartOnLogin
         let status = ctx.useState ""
         let sidInput = ctx.useState ""
+        let busy = ctx.useState false
+        let debounce = debounce 400
 
-        let save () =
-            svc.Settings.Update(fun s ->
+        let persist (mutate: DlsiteClient.Core.Models.AppSettings -> unit) =
+            svc.Settings.Update mutate
+
+        let applyPaths () =
+            persist (fun s ->
                 s.LibraryDirectory <- lib.Current
-                s.CacheDirectory <- cache.Current
+                s.CacheDirectory <- cache.Current)
+
+        let applyLog () =
+            persist (fun s ->
                 s.LogDirectory <- logPath.Current
-                s.LogLevel <- logLevel.Current
-                s.UiLocale <- locale.Current
-                s.ApiLocale <- if locale.Current = "zh-TW" then "zh_TW" else "ja_JP"
+                s.LogLevel <- logLevel.Current)
+            applyLogSettings logPath.Current logLevel.Current
+
+        let applyLocale (code: string) =
+            locale.Set code
+            persist (fun s ->
+                s.UiLocale <- code
+                s.ApiLocale <- if code = "zh-TW" then "zh_TW" else "ja_JP")
+            globalI18n.Load(code, svc.LocalesDir)
+            status.Set (t "settings.applied")
+
+        let applyDownload () =
+            persist (fun s ->
                 s.MaxConcurrentDownloads <-
                     match Int32.TryParse maxDl.Current with
                     | true, v -> max 1 v
@@ -54,12 +71,7 @@ let view () =
                     | true, v -> max 0.0 v
                     | _ -> 0.0
                 s.ProxyMode <- proxyMode.Current
-                s.ProxyUrl <- if String.IsNullOrWhiteSpace proxyUrl.Current then null else proxyUrl.Current
-                s.StartOnLogin <- startLogin.Current)
-            svc.Startup.SetEnabled startLogin.Current
-            globalI18n.Load(locale.Current, svc.LocalesDir)
-            applyLogSettings logPath.Current logLevel.Current
-            status.Set "OK"
+                s.ProxyUrl <- if String.IsNullOrWhiteSpace proxyUrl.Current then null else proxyUrl.Current)
 
         ScrollViewer.create [
             ScrollViewer.content (
@@ -86,33 +98,62 @@ let view () =
                             StackPanel.children [
                                 Button.create [
                                     Button.content (t "auth.login")
-                                    // Never GetResult() here: WebAuthenticationBroker needs the UI
-                                    // thread to paint/navigate; blocking freezes an empty login window.
+                                    Button.isEnabled (not busy.Current)
                                     Button.onClick (fun _ ->
                                         status.Set (t "auth.loggingIn")
-                                        ignore (
-                                            task {
-                                                let! r = loginAsync svc
-                                                Dispatcher.UIThread.Post(fun () ->
-                                                    status.Set (
-                                                        if r = "ok" then t "auth.loginOk"
-                                                        elif r = "cancelled" then t "auth.cancelled"
-                                                        else r))
-                                            }))
+                                        busy.Set true
+                                        runAsync
+                                            (fun () -> loginAsync svc)
+                                            (fun r ->
+                                                busy.Set false
+                                                if r = "ok" then
+                                                    status.Set (t "auth.loginOk")
+                                                    busy.Set true
+                                                    status.Set (t "auth.syncing")
+                                                    runPoolAsyncUnit
+                                                        (fun () -> svc.Library.SyncPurchasesAsync())
+                                                        (fun () ->
+                                                            busy.Set false
+                                                            status.Set (t "auth.synced"))
+                                                        (fun ex ->
+                                                            busy.Set false
+                                                            status.Set ex.Message)
+                                                elif r = "cancelled" then
+                                                    status.Set (t "auth.cancelled")
+                                                else
+                                                    status.Set r)
+                                            (fun ex ->
+                                                busy.Set false
+                                                status.Set ex.Message))
                                 ]
                                 Button.create [
                                     Button.content (t "auth.logout")
+                                    Button.isEnabled (not busy.Current)
                                     Button.onClick (fun _ ->
-                                        svc.Auth.LogoutAsync().GetAwaiter().GetResult()
-                                        status.Set (t "auth.logout"))
+                                        busy.Set true
+                                        runAsyncUnit
+                                            (fun () -> svc.Auth.LogoutAsync())
+                                            (fun () ->
+                                                busy.Set false
+                                                status.Set (t "auth.logout"))
+                                            (fun ex ->
+                                                busy.Set false
+                                                status.Set ex.Message))
                                 ]
                                 Button.create [
                                     Button.content (t "auth.sync")
+                                    Button.isEnabled (not busy.Current)
                                     Button.onClick (fun _ ->
-                                        try
-                                            svc.Library.SyncPurchasesAsync().GetAwaiter().GetResult()
-                                            status.Set (t "auth.synced")
-                                        with ex -> status.Set ex.Message)
+                                        busy.Set true
+                                        status.Set (t "auth.syncing")
+                                        runPoolAsyncUnit
+                                            (fun () -> svc.Library.SyncPurchasesAsync())
+                                            (fun () ->
+                                                busy.Set false
+                                                status.Set (t "auth.synced"))
+                                            (fun ex ->
+                                                busy.Set false
+                                                status.Set ex.Message))
                                 ]
                             ]
                         ]
@@ -127,11 +168,29 @@ let view () =
                         ]
                         Button.create [
                             Button.content (t "auth.sidLogin")
+                            Button.isEnabled (not busy.Current)
                             Button.onClick (fun _ ->
                                 if not (String.IsNullOrWhiteSpace sidInput.Current) then
-                                    svc.Auth.ApplyLoginAsync(sidInput.Current.Trim(), null)
-                                        .GetAwaiter().GetResult()
-                                    status.Set (t "auth.loginOk"))
+                                    let sid = sidInput.Current.Trim()
+                                    busy.Set true
+                                    runAsyncUnit
+                                        (fun () -> svc.Auth.ApplyLoginAsync(sid, null))
+                                        (fun () ->
+                                            busy.Set false
+                                            status.Set (t "auth.loginOk")
+                                            busy.Set true
+                                            status.Set (t "auth.syncing")
+                                            runPoolAsyncUnit
+                                                (fun () -> svc.Library.SyncPurchasesAsync())
+                                                (fun () ->
+                                                    busy.Set false
+                                                    status.Set (t "auth.synced"))
+                                                (fun ex ->
+                                                    busy.Set false
+                                                    status.Set ex.Message))
+                                        (fun ex ->
+                                            busy.Set false
+                                            status.Set ex.Message))
                         ]
 
                         TextBlock.create [
@@ -140,15 +199,29 @@ let view () =
                             TextBlock.fontWeight FontWeight.Bold
                         ]
                         TextBlock.create [ TextBlock.text (t "settings.libraryFolder") ]
-                        TextBox.create [ TextBox.text lib.Current; TextBox.onTextChanged lib.Set ]
+                        TextBox.create [
+                            TextBox.text lib.Current
+                            TextBox.onTextChanged (fun s ->
+                                lib.Set s
+                                debounce applyPaths)
+                        ]
                         TextBlock.create [ TextBlock.text (t "settings.cacheFolder") ]
-                        TextBox.create [ TextBox.text cache.Current; TextBox.onTextChanged cache.Set ]
+                        TextBox.create [
+                            TextBox.text cache.Current
+                            TextBox.onTextChanged (fun s ->
+                                cache.Set s
+                                debounce applyPaths)
+                        ]
                         CheckBox.create [
                             CheckBox.content (t "settings.startOnLogin")
                             CheckBox.isChecked startLogin.Current
                             CheckBox.onIsCheckedChanged (fun e ->
                                 match e.Source with
-                                | :? CheckBox as cb -> startLogin.Set (cb.IsChecked = Nullable true)
+                                | :? CheckBox as cb ->
+                                    let v = cb.IsChecked = Nullable true
+                                    startLogin.Set v
+                                    persist (fun s -> s.StartOnLogin <- v)
+                                    svc.Startup.SetEnabled v
                                 | _ -> ())
                         ]
 
@@ -158,7 +231,7 @@ let view () =
                             ComboBox.selectedItem locale.Current
                             ComboBox.onSelectedItemChanged (fun o ->
                                 match o with
-                                | :? string as s -> locale.Set s
+                                | :? string as s when s <> locale.Current -> applyLocale s
                                 | _ -> ())
                         ]
 
@@ -168,24 +241,43 @@ let view () =
                             TextBlock.fontWeight FontWeight.Bold
                         ]
                         TextBlock.create [ TextBlock.text (t "settings.maxDownloads") ]
-                        TextBox.create [ TextBox.text maxDl.Current; TextBox.onTextChanged maxDl.Set ]
+                        TextBox.create [
+                            TextBox.text maxDl.Current
+                            TextBox.onTextChanged (fun s ->
+                                maxDl.Set s
+                                debounce applyDownload)
+                        ]
                         TextBlock.create [ TextBlock.text (t "settings.maxExtracts") ]
-                        TextBox.create [ TextBox.text maxEx.Current; TextBox.onTextChanged maxEx.Set ]
+                        TextBox.create [
+                            TextBox.text maxEx.Current
+                            TextBox.onTextChanged (fun s ->
+                                maxEx.Set s
+                                debounce applyDownload)
+                        ]
                         TextBlock.create [ TextBlock.text (t "settings.rateLimit") ]
-                        TextBox.create [ TextBox.text rate.Current; TextBox.onTextChanged rate.Set ]
+                        TextBox.create [
+                            TextBox.text rate.Current
+                            TextBox.onTextChanged (fun s ->
+                                rate.Set s
+                                debounce applyDownload)
+                        ]
                         TextBlock.create [ TextBlock.text (t "settings.proxy") ]
                         ComboBox.create [
                             ComboBox.dataItems [ "off"; "system"; "custom" ]
                             ComboBox.selectedItem proxyMode.Current
                             ComboBox.onSelectedItemChanged (fun o ->
                                 match o with
-                                | :? string as s -> proxyMode.Set s
+                                | :? string as s ->
+                                    proxyMode.Set s
+                                    applyDownload ()
                                 | _ -> ())
                         ]
                         TextBox.create [
                             TextBox.watermark "http://host:port"
                             TextBox.text proxyUrl.Current
-                            TextBox.onTextChanged proxyUrl.Set
+                            TextBox.onTextChanged (fun s ->
+                                proxyUrl.Set s
+                                debounce applyDownload)
                         ]
 
                         TextBlock.create [
@@ -200,11 +292,18 @@ let view () =
                             ComboBox.selectedItem logLevel.Current
                             ComboBox.onSelectedItemChanged (fun o ->
                                 match o with
-                                | :? string as s -> logLevel.Set s
+                                | :? string as s ->
+                                    logLevel.Set s
+                                    applyLog ()
                                 | _ -> ())
                         ]
                         TextBlock.create [ TextBlock.text (t "settings.logPath") ]
-                        TextBox.create [ TextBox.text logPath.Current; TextBox.onTextChanged logPath.Set ]
+                        TextBox.create [
+                            TextBox.text logPath.Current
+                            TextBox.onTextChanged (fun s ->
+                                logPath.Set s
+                                debounce applyLog)
+                        ]
                         Button.create [
                             Button.content (t "settings.open")
                             Button.onClick (fun _ -> svc.Shell.OpenFolder logPath.Current)
@@ -213,7 +312,6 @@ let view () =
                         Button.create [
                             Button.content (t "settings.nestImportTitle")
                             Button.onClick (fun _ ->
-                                // Reset flag so prompt runs again with confirmation
                                 svc.Settings.Update(fun s -> s.NestImportAsked <- false)
                                 maybeAsk svc
                                 let s = svc.Settings.Current
@@ -222,11 +320,11 @@ let view () =
                                 status.Set (t "settings.nestImportTitle"))
                         ]
 
-                        Button.create [
-                            Button.content (t "common.ok")
-                            Button.onClick (fun _ -> save ())
+                        TextBlock.create [
+                            TextBlock.text (
+                                if busy.Current then t "settings.working" else status.Current)
+                            TextBlock.opacity 0.8
                         ]
-                        TextBlock.create [ TextBlock.text status.Current ]
                     ]
                 ])
         ])

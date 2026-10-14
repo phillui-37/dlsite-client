@@ -3,9 +3,9 @@ module DlsiteClient.App.Views.LibraryView
 open System
 open System.Runtime.InteropServices
 open Avalonia.Controls
-open Avalonia.Input
 open Avalonia.Layout
 open Avalonia.Media
+open Avalonia.Threading
 open Avalonia.FuncUI
 open Avalonia.FuncUI.DSL
 open Avalonia.FuncUI.Types
@@ -15,6 +15,7 @@ open DlsiteClient.App.Localization
 open DlsiteClient.App.Services
 open DlsiteClient.App.Fmt
 open DlsiteClient.App.ThumbCache
+open DlsiteClient.App.UiAsync
 
 [<DllImport("user32.dll", CharSet = CharSet.Unicode)>]
 extern int private MessageBoxW(nativeint hWnd, string text, string caption, uint32 typ)
@@ -25,6 +26,11 @@ let private IDYES = 6
 
 let private orDash (s: string | null) =
     if String.IsNullOrEmpty s then "-" else s
+
+let private pageSizeOptions = [| 20; 50; 100 |]
+
+let private clampPageSize (n: int) =
+    if n = 50 || n = 100 then n else 20
 
 type private SortCol =
     | Purchase
@@ -63,29 +69,13 @@ let private sortKey (c: SortCol) (w: WorkItem) : IComparable =
 let private thumbUrl (w: WorkItem) =
     if String.IsNullOrWhiteSpace w.ThumbUrl then "" else w.ThumbUrl
 
-let private thumbView (url: string) (w: float) (h: float) : IView =
-    match tryGet url with
-    | Some bmp ->
-        Image.create [
-            Image.source bmp
-            Image.width w
-            Image.height h
-            Image.stretch Stretch.UniformToFill
-        ]
-        :> IView
-    | None ->
-        Border.create [
-            Border.width w
-            Border.height h
-            Border.background "#E5E7EB"
-            Border.child (
-                TextBlock.create [
-                    TextBlock.text " "
-                    TextBlock.horizontalAlignment HorizontalAlignment.Center
-                    TextBlock.verticalAlignment VerticalAlignment.Center
-                ])
-        ]
-        :> IView
+let private workTypeLabel (svc: AppServices) (code: string) =
+    let api = svc.Library.WorkTypeDisplay code
+    if not (String.Equals(api, code, StringComparison.Ordinal)) then api
+    else
+        let key = "workType." + code
+        let loc = t key
+        if loc = key then code else loc
 
 let private contextMenu
     (svc: AppServices)
@@ -100,13 +90,14 @@ let private contextMenu
                 MenuItem.create [
                     MenuItem.header (t "detail.play")
                     MenuItem.onClick (fun _ ->
-                        try
-                            let d = svc.Launcher.PrepareLaunch w.Workno
-                            if d.NeedsUserChoice then onOpenDetail ()
-                            else
-                                svc.Launcher.ConfirmAndLaunch(
-                                    w.Workno, d.ExePath, false, d.UseJapanLocale)
-                        with _ -> onOpenDetail ())
+                        run
+                            (fun () -> svc.Launcher.PrepareLaunch w.Workno)
+                            (fun d ->
+                                if d.NeedsUserChoice then onOpenDetail ()
+                                else
+                                    svc.Launcher.ConfirmAndLaunch(
+                                        w.Workno, d.ExePath, false, d.UseJapanLocale))
+                            (fun _ -> onOpenDetail ()))
                 ]
             MenuItem.create [
                 MenuItem.header (t "library.action.download")
@@ -138,11 +129,32 @@ let private contextMenu
                 MenuItem.create [
                     MenuItem.header (t "library.action.uninstall")
                     MenuItem.onClick (fun _ ->
-                        svc.Library.MarkUninstalled w.Workno
-                        bump ())
+                        runAsyncUnit
+                            (fun () -> svc.Library.MarkUninstalledAsync w.Workno)
+                            bump
+                            (fun _ -> bump ()))
                 ]
         ]
     ]
+
+let private skeletonRow () : IView =
+    Border.create [
+        Border.margin (4.0, 2.0)
+        Border.padding 6.0
+        Border.background "#F3F4F6"
+        Border.cornerRadius 4.0
+        Border.child (
+            StackPanel.create [
+                StackPanel.orientation Orientation.Horizontal
+                StackPanel.spacing 8.0
+                StackPanel.children [
+                    Border.create [ Border.width 40.0; Border.height 40.0; Border.background "#E5E7EB"; Border.cornerRadius 4.0 ]
+                    Border.create [ Border.width 180.0; Border.height 14.0; Border.background "#E5E7EB"; Border.cornerRadius 3.0; Border.verticalAlignment VerticalAlignment.Center ]
+                    Border.create [ Border.width 100.0; Border.height 14.0; Border.background "#E5E7EB"; Border.cornerRadius 3.0; Border.verticalAlignment VerticalAlignment.Center ]
+                ]
+            ])
+    ]
+    :> IView
 
 let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
     Component(fun ctx ->
@@ -159,10 +171,38 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
         let mode = ctx.useState svc.Settings.Current.ViewMode
         let sortCol = ctx.useState SortCol.Purchase
         let sortAsc = ctx.useState false
-        let visible =
-            ctx.useState (parseVisible svc.Settings.Current.VisibleColumns)
+        let visible = ctx.useState (parseVisible svc.Settings.Current.VisibleColumns)
+        let pageSize = ctx.useState (clampPageSize svc.Settings.Current.LibraryPageSize)
+        let page = ctx.useState 0
+        let expandTypes = ctx.useState false
+        let expandCols = ctx.useState false
+        let expandTags = ctx.useState false
+        let bootstrapping = ctx.useState true
+
+        ctx.useEffect (
+            (fun () ->
+                let bumpUi () =
+                    Dispatcher.UIThread.Post(fun () -> tick.Set(tick.Current + 1))
+                let libHandler = Action(bumpUi)
+                svc.Library.add_Changed libHandler
+                let thumbSub = subscribe (Action(bumpUi))
+                runPoolAsyncUnit
+                    (fun () -> svc.Library.EnsureWorkTypeNamesAsync())
+                    (fun () ->
+                        bootstrapping.Set false
+                        bumpUi ())
+                    (fun _ ->
+                        bootstrapping.Set false
+                        bumpUi ())
+                { new IDisposable with
+                    member _.Dispose() =
+                        svc.Library.remove_Changed libHandler
+                        thumbSub.Dispose() }),
+            [ EffectTrigger.AfterInit ])
 
         let _ = tick.Current
+        let bump () = tick.Set(tick.Current + 1)
+
         let tagArg = if String.IsNullOrWhiteSpace tagFilter.Current then null else tagFilter.Current
         let worksRaw =
             if workTypes.Current.IsEmpty then
@@ -181,11 +221,24 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                 else keyed |> List.sortByDescending fst
             ordered |> List.map snd
 
-        let bump () = tick.Set(tick.Current + 1)
+        let total = works.Length
+        let size = pageSize.Current
+        let pageCount = if total = 0 then 1 else (total + size - 1) / size
+        let pageIdx = min page.Current (pageCount - 1) |> max 0
+        let pageWorks =
+            works
+            |> List.skip (pageIdx * size)
+            |> List.truncate size
 
         let setMode (m: LibraryViewMode) =
             mode.Set m
             svc.Settings.Update(fun s -> s.ViewMode <- m)
+
+        let setPageSize (n: int) =
+            let v = clampPageSize n
+            pageSize.Set v
+            page.Set 0
+            svc.Settings.Update(fun s -> s.LibraryPageSize <- v)
 
         let toggleCol (key: string) =
             let next =
@@ -202,6 +255,7 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
             else
                 sortCol.Set c
                 sortAsc.Set true
+            page.Set 0
 
         let enqueue isUpdate =
             let set = selected.Current
@@ -220,10 +274,16 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                         t "library.action.uninstall",
                         MB_YESNO ||| MB_ICONQUESTION)
                 if r = IDYES then
-                    for w in selected.Current do
-                        svc.Library.MarkUninstalled w
+                    let ids = selected.Current |> Set.toList
                     selected.Set Set.empty
-                    bump ()
+                    runAsyncUnit
+                        (fun () ->
+                            task {
+                                for id in ids do
+                                    do! svc.Library.MarkUninstalledAsync id
+                            })
+                        bump
+                        (fun _ -> bump ())
 
         let titleWithDlc (w: WorkItem) =
             if w.IsDlc && svc.Library.DlcFeatureEnabled then
@@ -292,7 +352,13 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                   if colVisible vis "maker" then
                       TextBlock.create [ TextBlock.text w.MakerName; TextBlock.width 120.0; TextBlock.margin 4.0 ] :> IView
                   if colVisible vis "workType" then
-                      TextBlock.create [ TextBlock.text w.WorkType; TextBlock.width 70.0; TextBlock.margin 4.0 ] :> IView
+                      TextBlock.create [
+                          TextBlock.text (workTypeLabel svc w.WorkType)
+                          TextBlock.width 100.0
+                          TextBlock.margin 4.0
+                          TextBlock.textTrimming TextTrimming.CharacterEllipsis
+                      ]
+                      :> IView
                   if colVisible vis "rating" then
                       TextBlock.create [ TextBlock.text w.RatingText; TextBlock.width 48.0; TextBlock.margin 4.0 ] :> IView
                   if colVisible vis "salesDate" then
@@ -305,8 +371,7 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                       ]
                       :> IView
                   if colVisible vis "extractSize" then
-                      TextBlock.create [ TextBlock.text (sizeBytes w.ContentsFileSize); TextBlock.width 72.0; TextBlock.margin 4.0 ] :> IView
-                ]
+                      TextBlock.create [ TextBlock.text (sizeBytes w.ContentsFileSize); TextBlock.width 72.0; TextBlock.margin 4.0 ] :> IView ]
                 @ updateBtn w
 
             Border.create [
@@ -344,6 +409,12 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                                   TextBlock.text (titleWithDlc w)
                                   TextBlock.textWrapping TextWrapping.Wrap
                                   TextBlock.maxHeight 40.0
+                              ]
+                              :> IView
+                              TextBlock.create [
+                                  TextBlock.text (workTypeLabel svc w.WorkType)
+                                  TextBlock.opacity 0.7
+                                  TextBlock.fontSize 11.0
                               ]
                               :> IView ]
                             @ updateBtn w)
@@ -395,7 +466,7 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                                                     " · ",
                                                     [|
                                                         w.MakerName
-                                                        w.WorkType
+                                                        workTypeLabel svc w.WorkType
                                                         w.RatingText
                                                         orDash w.RegistDate
                                                         sizeBytes w.ContentsFileSize
@@ -410,8 +481,54 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
             ]
             :> IView
 
+        let pager : IView =
+            StackPanel.create [
+                StackPanel.orientation Orientation.Horizontal
+                StackPanel.spacing 8.0
+                StackPanel.margin (8.0, 4.0)
+                StackPanel.children [
+                    TextBlock.create [
+                        TextBlock.text (fmt1 (t "library.count") total)
+                        TextBlock.verticalAlignment VerticalAlignment.Center
+                    ]
+                    TextBlock.create [
+                        TextBlock.text (t "library.pageSize")
+                        TextBlock.verticalAlignment VerticalAlignment.Center
+                    ]
+                    ComboBox.create [
+                        ComboBox.width 72.0
+                        ComboBox.dataItems pageSizeOptions
+                        ComboBox.selectedItem pageSize.Current
+                        ComboBox.onSelectedItemChanged (fun o ->
+                            match o with
+                            | :? int as n -> setPageSize n
+                            | _ -> ())
+                    ]
+                    Button.create [
+                        Button.content (t "library.prev")
+                        Button.isEnabled (pageIdx > 0)
+                        Button.onClick (fun _ -> page.Set(pageIdx - 1); bump ())
+                    ]
+                    TextBlock.create [
+                        TextBlock.text (fmt2 (t "library.pageOf") (pageIdx + 1) pageCount)
+                        TextBlock.verticalAlignment VerticalAlignment.Center
+                    ]
+                    Button.create [
+                        Button.content (t "library.next")
+                        Button.isEnabled (pageIdx + 1 < pageCount)
+                        Button.onClick (fun _ -> page.Set(pageIdx + 1); bump ())
+                    ]
+                ]
+            ]
+            :> IView
+
         let body : IView =
-            if works.IsEmpty then
+            if bootstrapping.Current && total = 0 then
+                StackPanel.create [
+                    StackPanel.children ([ 1..5 ] |> List.map (fun _ -> skeletonRow ()))
+                ]
+                :> IView
+            elif pageWorks.IsEmpty then
                 TextBlock.create [
                     TextBlock.text (t "library.empty")
                     TextBlock.margin 24.0
@@ -424,7 +541,7 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                     ScrollViewer.create [
                         ScrollViewer.content (
                             WrapPanel.create [
-                                WrapPanel.children (works |> List.map gridCard)
+                                WrapPanel.children (pageWorks |> List.map gridCard)
                             ])
                     ]
                     :> IView
@@ -432,7 +549,7 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                     ScrollViewer.create [
                         ScrollViewer.content (
                             StackPanel.create [
-                                StackPanel.children (works |> List.map hybridRow)
+                                StackPanel.children (pageWorks |> List.map hybridRow)
                             ])
                     ]
                     :> IView
@@ -461,25 +578,33 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                             ScrollViewer.create [
                                 ScrollViewer.content (
                                     StackPanel.create [
-                                        StackPanel.children (works |> List.map listRow)
+                                        StackPanel.children (pageWorks |> List.map listRow)
                                     ])
                             ]
                         ]
                     ]
                     :> IView
 
+        let toggleHeader (label: string) (open': bool) (setOpen: bool -> unit) : IView =
+            Button.create [
+                Button.content (if open' then "▾ " + label else "▸ " + label)
+                Button.horizontalAlignment HorizontalAlignment.Left
+                Button.onClick (fun _ -> setOpen (not open'))
+            ]
+            :> IView
+
         DockPanel.create [
             DockPanel.children [
                 StackPanel.create [
                     DockPanel.dock Dock.Top
                     StackPanel.orientation Orientation.Vertical
-                    StackPanel.spacing 8.0
+                    StackPanel.spacing 6.0
                     StackPanel.margin 8.0
                     StackPanel.children [
                         TextBox.create [
                             TextBox.watermark (t "library.search")
                             TextBox.text search.Current
-                            TextBox.onTextChanged search.Set
+                            TextBox.onTextChanged (fun s -> search.Set s; page.Set 0)
                         ]
                         StackPanel.create [
                             StackPanel.orientation Orientation.Horizontal
@@ -494,49 +619,10 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                                 |> List.map (fun (f0, key) ->
                                     Button.create [
                                         Button.content (t key)
-                                        Button.onClick (fun _ -> media.Set f0)
+                                        Button.onClick (fun _ -> media.Set f0; page.Set 0)
                                     ]
                                     :> IView))
                         ]
-                        if not typesAvailable.IsEmpty then
-                            WrapPanel.create [
-                                WrapPanel.children (
-                                    typesAvailable
-                                    |> List.map (fun wt ->
-                                        CheckBox.create [
-                                            CheckBox.content wt
-                                            CheckBox.margin 4.0
-                                            CheckBox.isChecked (workTypes.Current.Contains wt)
-                                            CheckBox.onIsCheckedChanged (fun e ->
-                                                match e.Source with
-                                                | :? CheckBox as cb when cb.IsChecked = Nullable true ->
-                                                    workTypes.Set(workTypes.Current.Add wt)
-                                                | :? CheckBox -> workTypes.Set(workTypes.Current.Remove wt)
-                                                | _ -> ())
-                                        ]
-                                        :> IView))
-                            ]
-                        if not tagsAvailable.IsEmpty then
-                            StackPanel.create [
-                                StackPanel.orientation Orientation.Horizontal
-                                StackPanel.spacing 8.0
-                                StackPanel.children [
-                                    TextBlock.create [
-                                        TextBlock.text (t "library.tagFilter")
-                                        TextBlock.verticalAlignment VerticalAlignment.Center
-                                    ]
-                                    ComboBox.create [
-                                        ComboBox.width 220.0
-                                        ComboBox.dataItems (("" :: tagsAvailable) |> List.toArray)
-                                        ComboBox.selectedItem tagFilter.Current
-                                        ComboBox.onSelectedItemChanged (fun o ->
-                                            match o with
-                                            | :? string as s -> tagFilter.Set s
-                                            | null -> tagFilter.Set ""
-                                            | _ -> ())
-                                    ]
-                                ]
-                            ]
                         StackPanel.create [
                             StackPanel.orientation Orientation.Horizontal
                             StackPanel.spacing 8.0
@@ -546,7 +632,7 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                                     CheckBox.isChecked favOnly.Current
                                     CheckBox.onIsCheckedChanged (fun e ->
                                         match e.Source with
-                                        | :? CheckBox as cb -> favOnly.Set (cb.IsChecked = Nullable true)
+                                        | :? CheckBox as cb -> favOnly.Set (cb.IsChecked = Nullable true); page.Set 0
                                         | _ -> ())
                                 ]
                                 CheckBox.create [
@@ -554,7 +640,7 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                                     CheckBox.isChecked showHidden.Current
                                     CheckBox.onIsCheckedChanged (fun e ->
                                         match e.Source with
-                                        | :? CheckBox as cb -> showHidden.Set (cb.IsChecked = Nullable true)
+                                        | :? CheckBox as cb -> showHidden.Set (cb.IsChecked = Nullable true); page.Set 0
                                         | _ -> ())
                                 ]
                                 CheckBox.create [
@@ -562,7 +648,7 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                                     CheckBox.isChecked dlOnly.Current
                                     CheckBox.onIsCheckedChanged (fun e ->
                                         match e.Source with
-                                        | :? CheckBox as cb -> dlOnly.Set (cb.IsChecked = Nullable true)
+                                        | :? CheckBox as cb -> dlOnly.Set (cb.IsChecked = Nullable true); page.Set 0
                                         | _ -> ())
                                 ]
                                 Button.create [
@@ -591,34 +677,68 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                                 ]
                             ]
                         ]
-                        WrapPanel.create [
-                            WrapPanel.children (
-                                [ "purchaseDate", "library.col.purchaseDate"
-                                  "maker", "library.col.maker"
-                                  "workType", "library.col.workType"
-                                  "rating", "library.col.rating"
-                                  "salesDate", "library.col.salesDate"
-                                  "downloaded", "library.col.downloaded"
-                                  "extractSize", "library.col.extractSize"
-                                  "update", "library.col.update" ]
-                                |> List.map (fun (key, loc) ->
-                                    CheckBox.create [
-                                        CheckBox.content (t loc)
-                                        CheckBox.margin 4.0
-                                        CheckBox.isChecked (colVisible vis key)
-                                        CheckBox.onIsCheckedChanged (fun e ->
-                                            match e.Source with
-                                            | :? CheckBox as cb ->
-                                                let want = cb.IsChecked = Nullable true
-                                                let have = colVisible visible.Current key
-                                                if want <> have then toggleCol key
-                                            | _ -> ())
-                                    ]
-                                    :> IView))
-                        ]
-                        TextBlock.create [
-                            TextBlock.text (fmt1 (t "library.count") works.Length)
-                        ]
+                        if not typesAvailable.IsEmpty then
+                            toggleHeader (t "library.workTypes") expandTypes.Current expandTypes.Set
+                        if expandTypes.Current && not typesAvailable.IsEmpty then
+                            WrapPanel.create [
+                                WrapPanel.children (
+                                    typesAvailable
+                                    |> List.map (fun wt ->
+                                        CheckBox.create [
+                                            CheckBox.content (workTypeLabel svc wt)
+                                            CheckBox.margin 4.0
+                                            CheckBox.isChecked (workTypes.Current.Contains wt)
+                                            CheckBox.onIsCheckedChanged (fun e ->
+                                                match e.Source with
+                                                | :? CheckBox as cb when cb.IsChecked = Nullable true ->
+                                                    workTypes.Set(workTypes.Current.Add wt); page.Set 0
+                                                | :? CheckBox ->
+                                                    workTypes.Set(workTypes.Current.Remove wt); page.Set 0
+                                                | _ -> ())
+                                        ]
+                                        :> IView))
+                            ]
+                        if not tagsAvailable.IsEmpty then
+                            toggleHeader (t "library.tagFilter") expandTags.Current expandTags.Set
+                        if expandTags.Current && not tagsAvailable.IsEmpty then
+                            ComboBox.create [
+                                ComboBox.width 220.0
+                                ComboBox.dataItems (("" :: tagsAvailable) |> List.toArray)
+                                ComboBox.selectedItem tagFilter.Current
+                                ComboBox.onSelectedItemChanged (fun o ->
+                                    match o with
+                                    | :? string as s -> tagFilter.Set s; page.Set 0
+                                    | null -> tagFilter.Set ""; page.Set 0
+                                    | _ -> ())
+                            ]
+                        toggleHeader (t "library.columns") expandCols.Current expandCols.Set
+                        if expandCols.Current then
+                            WrapPanel.create [
+                                WrapPanel.children (
+                                    [ "purchaseDate", "library.col.purchaseDate"
+                                      "maker", "library.col.maker"
+                                      "workType", "library.col.workType"
+                                      "rating", "library.col.rating"
+                                      "salesDate", "library.col.salesDate"
+                                      "downloaded", "library.col.downloaded"
+                                      "extractSize", "library.col.extractSize"
+                                      "update", "library.col.update" ]
+                                    |> List.map (fun (key, loc) ->
+                                        CheckBox.create [
+                                            CheckBox.content (t loc)
+                                            CheckBox.margin 4.0
+                                            CheckBox.isChecked (colVisible vis key)
+                                            CheckBox.onIsCheckedChanged (fun e ->
+                                                match e.Source with
+                                                | :? CheckBox as cb ->
+                                                    let want = cb.IsChecked = Nullable true
+                                                    let have = colVisible visible.Current key
+                                                    if want <> have then toggleCol key
+                                                | _ -> ())
+                                        ]
+                                        :> IView))
+                            ]
+                        pager
                     ]
                 ]
                 ContentControl.create [ ContentControl.content body ]
