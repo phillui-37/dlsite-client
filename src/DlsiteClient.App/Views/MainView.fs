@@ -7,6 +7,7 @@ open Avalonia.FuncUI
 open Avalonia.FuncUI.DSL
 open Avalonia.FuncUI.Types
 open DlsiteClient.App.Localization
+open DlsiteClient.App.Services
 open DlsiteClient.App.Views
 
 type Page =
@@ -17,7 +18,11 @@ type Page =
 
 let view () =
     Component(fun ctx ->
-        let page = ctx.useState Page.Library
+        let initial =
+            match pendingPlayWorkno with
+            | Some w -> Page.Detail w
+            | None -> Page.Library
+        let page = ctx.useState initial
 
         DockPanel.create [
             DockPanel.children [

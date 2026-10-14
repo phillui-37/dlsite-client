@@ -91,10 +91,23 @@ let private contextMenu
     (svc: AppServices)
     (w: WorkItem)
     (onGoDownloads: unit -> unit)
+    (onOpenDetail: unit -> unit)
     (bump: unit -> unit)
     : IView<ContextMenu> =
     ContextMenu.create [
         ContextMenu.viewItems [
+            if w.IsDownloaded then
+                MenuItem.create [
+                    MenuItem.header (t "detail.play")
+                    MenuItem.onClick (fun _ ->
+                        try
+                            let d = svc.Launcher.PrepareLaunch w.Workno
+                            if d.NeedsUserChoice then onOpenDetail ()
+                            else
+                                svc.Launcher.ConfirmAndLaunch(
+                                    w.Workno, d.ExePath, false, d.UseJapanLocale)
+                        with _ -> onOpenDetail ())
+                ]
             MenuItem.create [
                 MenuItem.header (t "library.action.download")
                 MenuItem.onClick (fun _ ->
@@ -108,23 +121,26 @@ let private contextMenu
                     onGoDownloads ())
             ]
             MenuItem.create [
-                MenuItem.header (t "library.action.favorite")
+                MenuItem.header (
+                    if w.IsFavorite then t "library.action.unfavorite" else t "library.action.favorite")
                 MenuItem.onClick (fun _ ->
                     svc.Library.SetFavorite(w.Workno, not w.IsFavorite)
                     bump ())
             ]
             MenuItem.create [
-                MenuItem.header (t "library.action.hide")
+                MenuItem.header (
+                    if w.IsHidden then t "library.action.unhide" else t "library.action.hide")
                 MenuItem.onClick (fun _ ->
                     svc.Library.SetHidden(w.Workno, not w.IsHidden)
                     bump ())
             ]
-            MenuItem.create [
-                MenuItem.header (t "library.action.uninstall")
-                MenuItem.onClick (fun _ ->
-                    svc.Library.MarkUninstalled w.Workno
-                    bump ())
-            ]
+            if w.IsDownloaded then
+                MenuItem.create [
+                    MenuItem.header (t "library.action.uninstall")
+                    MenuItem.onClick (fun _ ->
+                        svc.Library.MarkUninstalled w.Workno
+                        bump ())
+                ]
         ]
     ]
 
@@ -295,7 +311,7 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
 
             Border.create [
                 Border.padding 2.0
-                Border.contextMenu (contextMenu svc w onGoDownloads bump)
+                Border.contextMenu (contextMenu svc w onGoDownloads (fun () -> onOpenDetail w.Workno) bump)
                 Border.onPointerPressed (fun e ->
                     if e.ClickCount >= 2 && e.GetCurrentPoint(null).Properties.IsLeftButtonPressed then
                         onOpenDetail w.Workno)
@@ -314,7 +330,7 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                 Border.margin 6.0
                 Border.padding 6.0
                 Border.background "#FAFAFA"
-                Border.contextMenu (contextMenu svc w onGoDownloads bump)
+                Border.contextMenu (contextMenu svc w onGoDownloads (fun () -> onOpenDetail w.Workno) bump)
                 Border.onPointerPressed (fun e ->
                     if e.ClickCount >= 2 && e.GetCurrentPoint(null).Properties.IsLeftButtonPressed then
                         onOpenDetail w.Workno)
@@ -339,7 +355,7 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
             Border.create [
                 Border.padding 4.0
                 Border.margin (0.0, 2.0)
-                Border.contextMenu (contextMenu svc w onGoDownloads bump)
+                Border.contextMenu (contextMenu svc w onGoDownloads (fun () -> onOpenDetail w.Workno) bump)
                 Border.onPointerPressed (fun e ->
                     if e.ClickCount >= 2 && e.GetCurrentPoint(null).Properties.IsLeftButtonPressed then
                         onOpenDetail w.Workno)

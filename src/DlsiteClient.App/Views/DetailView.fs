@@ -1,6 +1,7 @@
 module DlsiteClient.App.Views.DetailView
 
 open System
+open System.IO
 open Avalonia.Controls
 open Avalonia.Layout
 open Avalonia.Media
@@ -16,6 +17,12 @@ open DlsiteClient.App.ThumbCache
 let private orDash (s: string) =
     if String.IsNullOrEmpty s then "-" else s
 
+let private fileNameOrPath (p: string) =
+    if String.IsNullOrEmpty p then ""
+    else
+        try Path.GetFileName p
+        with _ -> p
+
 let view (workno: string) (onBack: unit -> unit) =
     Component(fun ctx ->
         let svc = get ()
@@ -24,6 +31,35 @@ let view (workno: string) (onBack: unit -> unit) =
         let selectedExe = ctx.useState ""
         let always = ctx.useState true
         let status = ctx.useState ""
+        let tick = ctx.useState 0
+
+        let beginPlay (useJapan: bool) =
+            try
+                let d = svc.Launcher.PrepareLaunch workno
+                if d.NeedsUserChoice then
+                    let list = d.Candidates |> Seq.toList
+                    exeChoice.Set(Some list)
+                    selectedExe.Set(match list with | h :: _ -> h | [] -> "")
+                else
+                    svc.Launcher.ConfirmAndLaunch(workno, d.ExePath, false, useJapan)
+            with ex ->
+                status.Set ex.Message
+
+        ctx.useEffect (
+            (fun () ->
+                match pendingPlayWorkno with
+                | Some w when w = workno ->
+                    pendingPlayWorkno <- None
+                    match svc.Library.Works |> Seq.tryFind (fun x -> x.Workno = workno) with
+                    | Some ww when ww.IsDownloaded ->
+                        beginPlay ww.UseJapanLocale
+                        tick.Set(tick.Current + 1)
+                    | _ -> status.Set (t "detail.notFound")
+                | _ -> ()
+                { new IDisposable with member _.Dispose() = () }),
+            [ EffectTrigger.AfterInit ])
+
+        let _ = tick.Current
 
         match work with
         | None ->
@@ -35,6 +71,7 @@ let view (workno: string) (onBack: unit -> unit) =
             ]
         | Some w ->
             let tags = LibraryService.ParseTags(w.TagsJson) |> Seq.toList
+            let hasSavedExe = not (String.IsNullOrEmpty w.SelectedExe)
 
             DockPanel.create [
                 DockPanel.children [
@@ -111,8 +148,15 @@ let view (workno: string) (onBack: unit -> unit) =
                                             match e.Source with
                                             | :? CheckBox as cb ->
                                                 svc.Library.SetJapanLocale(w.Workno, cb.IsChecked = Nullable true)
+                                                tick.Set(tick.Current + 1)
                                             | _ -> ())
                                     ]
+                                    if hasSavedExe then
+                                        TextBlock.create [
+                                            TextBlock.text (
+                                                fmt2 "{0} : {1}" (t "launcher.savedExe") (fileNameOrPath w.SelectedExe))
+                                            TextBlock.opacity 0.8
+                                        ]
                                     StackPanel.create [
                                         StackPanel.orientation Orientation.Horizontal
                                         StackPanel.spacing 8.0
@@ -131,19 +175,26 @@ let view (workno: string) (onBack: unit -> unit) =
                                                 Button.create [
                                                     Button.content (t "detail.play")
                                                     Button.onClick (fun _ ->
+                                                        beginPlay w.UseJapanLocale
+                                                        tick.Set(tick.Current + 1))
+                                                ]
+                                                Button.create [
+                                                    Button.content (t "launcher.changeExe")
+                                                    Button.onClick (fun _ ->
+                                                        svc.Library.ClearSelectedExe w.Workno
                                                         try
-                                                            let d = svc.Launcher.PrepareLaunch w.Workno
-                                                            if d.NeedsUserChoice then
-                                                                let list = d.Candidates |> Seq.toList
-                                                                exeChoice.Set(Some list)
-                                                                selectedExe.Set(
-                                                                    match list with
-                                                                    | h :: _ -> h
-                                                                    | [] -> "")
+                                                            let install =
+                                                                if isNull w.InstallPath then "" else w.InstallPath
+                                                            let exes =
+                                                                svc.Launcher.FindExecutables install |> Seq.toList
+                                                            if exes.IsEmpty then
+                                                                status.Set (t "launcher.noExe")
                                                             else
-                                                                svc.Launcher.ConfirmAndLaunch(
-                                                                    w.Workno, d.ExePath, false, d.UseJapanLocale)
-                                                        with ex -> status.Set ex.Message)
+                                                                exeChoice.Set(Some exes)
+                                                                selectedExe.Set(List.head exes)
+                                                                status.Set ""
+                                                        with ex -> status.Set ex.Message
+                                                        tick.Set(tick.Current + 1))
                                                 ]
                                             Button.create [
                                                 Button.content (t "detail.openStore")
@@ -194,7 +245,8 @@ let view (workno: string) (onBack: unit -> unit) =
                                                                     selectedExe.Current,
                                                                     always.Current,
                                                                     w.UseJapanLocale)
-                                                                exeChoice.Set None)
+                                                                exeChoice.Set None
+                                                                tick.Set(tick.Current + 1))
                                                         ]
                                                         Button.create [
                                                             Button.content (t "launcher.cancel")

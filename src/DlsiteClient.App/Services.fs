@@ -104,6 +104,12 @@ let build (_args: string[]) : AppServices =
 
 let mutable shared: AppServices option = None
 
+/// When protocol play needs an exe picker, MainView opens this work's detail.
+let mutable pendingPlayWorkno: string option = None
+
+let applyLogSettings (logDir: string) (level: string) =
+    bootstrapLogger logDir level
+
 let get () =
     match shared with
     | Some s -> s

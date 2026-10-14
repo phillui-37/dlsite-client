@@ -318,6 +318,15 @@ public sealed class LibraryService
             catch (Exception ex) { _logger.LogWarning(ex, "Uninstall delete failed for {Path}", path); }
         }
         _db.SetDownloaded(workno, false, null, null);
+        _db.SetSelectedExe(workno, null, w?.UseJapanLocale ?? false);
+        Reload();
+    }
+
+    public void ClearSelectedExe(string workno)
+    {
+        var w = _db.GetWork(workno);
+        if (w is null) return;
+        _db.SetSelectedExe(workno, null, w.UseJapanLocale);
         Reload();
     }
 }

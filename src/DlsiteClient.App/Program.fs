@@ -3,6 +3,7 @@ namespace DlsiteClient.App
 open System
 open System.Runtime.InteropServices
 open Avalonia
+open DlsiteClient.Core.Services
 open DlsiteClient.App.Services
 
 module Program =
@@ -19,13 +20,20 @@ module Program =
             let svc = build argv
             Services.shared <- Some svc
 
-            // Deep link launch: dlsite-client://play/{workno}
+            // Deep link: dlsite-client://play/{workno}
             let mutable workno = null
             if svc.Protocol.TryParsePlayWorkno(argv, &workno) && not (isNull workno) then
-                try
-                    svc.Launcher.LaunchReady workno
-                with ex ->
-                    showFatal "DLsite Client" ("Launch failed: " + ex.Message)
+                let r = svc.Launcher.TryProtocolLaunch workno
+                match r.Kind with
+                | ProtocolLaunchKind.Launched -> ()
+                | ProtocolLaunchKind.NeedsChoice ->
+                    Services.pendingPlayWorkno <- Some workno
+                | ProtocolLaunchKind.Failed
+                | _ ->
+                    let err =
+                        if String.IsNullOrEmpty r.Error then "Launch failed" else r.Error
+                    showFatal "DLsite Client" err
+                    Services.pendingPlayWorkno <- Some workno
 
             AppDomain.CurrentDomain.UnhandledException.Add(fun args ->
                 let ex = args.ExceptionObject :?> Exception

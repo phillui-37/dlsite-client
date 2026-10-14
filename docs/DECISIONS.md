@@ -65,3 +65,10 @@
 
 - **Status:** Accepted
 - Package: `Material.Avalonia` 3.21.0 — Light / Primary Blue / Secondary Teal (not Fluent)
+
+## ADR-015: Japan locale launch = soft env hint
+
+- **Status:** Accepted (M4)
+- Per-work flag sets child `LANG` / `LC_ALL` to `ja_JP.UTF-8`.
+- Full Windows AppLocale / Locale Emulator is out of scope (OS-dependent, not FOSS-bundled).
+- Protocol `dlsite-client://play/{workno}`: launch immediately when exe is known; if multi-exe needs a pick, open the work detail picker instead of failing closed.
