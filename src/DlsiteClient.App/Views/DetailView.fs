@@ -13,6 +13,7 @@ open DlsiteClient.App.Localization
 open DlsiteClient.App.Services
 open DlsiteClient.App.Fmt
 open DlsiteClient.App.ThumbCache
+open DlsiteClient.App.UiAsync
 
 let private orDash (s: string) =
     if String.IsNullOrEmpty s then "-" else s
@@ -34,19 +35,22 @@ let view (workno: string) (onBack: unit -> unit) =
         let tick = ctx.useState 0
 
         let beginPlay (useJapan: bool) =
-            try
-                let d = svc.Launcher.PrepareLaunch workno
-                if d.NeedsUserChoice then
-                    let list = d.Candidates |> Seq.toList
-                    exeChoice.Set(Some list)
-                    selectedExe.Set(match list with | h :: _ -> h | [] -> "")
-                else
-                    svc.Launcher.ConfirmAndLaunch(workno, d.ExePath, false, useJapan)
-            with ex ->
-                status.Set ex.Message
+            run
+                (fun () -> svc.Launcher.PrepareLaunch workno)
+                (fun d ->
+                    if d.NeedsUserChoice then
+                        let list = d.Candidates |> Seq.toList
+                        exeChoice.Set(Some list)
+                        selectedExe.Set(match list with | h :: _ -> h | [] -> "")
+                    else
+                        svc.Launcher.ConfirmAndLaunch(workno, d.ExePath, false, useJapan)
+                    tick.Set(tick.Current + 1))
+                (fun ex -> status.Set ex.Message)
 
         ctx.useEffect (
             (fun () ->
+                let thumbSub =
+                    subscribe (Action(fun () -> tick.Set(tick.Current + 1)))
                 match pendingPlayWorkno with
                 | Some w when w = workno ->
                     pendingPlayWorkno <- None
@@ -56,7 +60,8 @@ let view (workno: string) (onBack: unit -> unit) =
                         tick.Set(tick.Current + 1)
                     | _ -> status.Set (t "detail.notFound")
                 | _ -> ()
-                { new IDisposable with member _.Dispose() = () }),
+                { new IDisposable with
+                    member _.Dispose() = thumbSub.Dispose() }),
             [ EffectTrigger.AfterInit ])
 
         let _ = tick.Current
@@ -87,20 +92,7 @@ let view (workno: string) (onBack: unit -> unit) =
                                 StackPanel.margin 16.0
                                 StackPanel.spacing 8.0
                                 StackPanel.children [
-                                    match tryGet (if isNull w.ThumbUrl then "" else w.ThumbUrl) with
-                                    | Some bmp ->
-                                        Image.create [
-                                            Image.source bmp
-                                            Image.width 240.0
-                                            Image.height 240.0
-                                            Image.stretch Stretch.Uniform
-                                        ]
-                                    | None ->
-                                        Border.create [
-                                            Border.width 240.0
-                                            Border.height 240.0
-                                            Border.background "#E5E7EB"
-                                        ]
+                                    thumbView (if isNull w.ThumbUrl then "" else w.ThumbUrl) 240.0 240.0
                                     TextBlock.create [
                                         TextBlock.text w.WorkName
                                         TextBlock.fontSize 24.0
@@ -182,19 +174,22 @@ let view (workno: string) (onBack: unit -> unit) =
                                                     Button.content (t "launcher.changeExe")
                                                     Button.onClick (fun _ ->
                                                         svc.Library.ClearSelectedExe w.Workno
-                                                        try
-                                                            let install =
-                                                                if isNull w.InstallPath then "" else w.InstallPath
-                                                            let exes =
-                                                                svc.Launcher.FindExecutables install |> Seq.toList
-                                                            if exes.IsEmpty then
-                                                                status.Set (t "launcher.noExe")
-                                                            else
-                                                                exeChoice.Set(Some exes)
-                                                                selectedExe.Set(List.head exes)
-                                                                status.Set ""
-                                                        with ex -> status.Set ex.Message
-                                                        tick.Set(tick.Current + 1))
+                                                        let install =
+                                                            if isNull w.InstallPath then "" else w.InstallPath
+                                                        run
+                                                            (fun () ->
+                                                                svc.Launcher.FindExecutables install |> Seq.toList)
+                                                            (fun exes ->
+                                                                if exes.IsEmpty then
+                                                                    status.Set (t "launcher.noExe")
+                                                                else
+                                                                    exeChoice.Set(Some exes)
+                                                                    selectedExe.Set(List.head exes)
+                                                                    status.Set ""
+                                                                tick.Set(tick.Current + 1))
+                                                            (fun ex ->
+                                                                status.Set ex.Message
+                                                                tick.Set(tick.Current + 1)))
                                                 ]
                                             Button.create [
                                                 Button.content (t "detail.openStore")

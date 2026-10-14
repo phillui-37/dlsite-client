@@ -15,6 +15,7 @@
   <ItemGroup>
     <Compile Include="Fmt.fs" />
     <Compile Include="Localization.fs" />
+    <Compile Include="UiAsync.fs" />
     <Compile Include="Services.fs" />
     <Compile Include="ThumbCache.fs" />
     <Compile Include="OAuthLogin.fs" />
