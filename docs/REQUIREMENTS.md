@@ -44,16 +44,25 @@ Nest replacement. Windows first; UI must stay cross-platform capable.
 
 ## Settings
 
-- Logout, cache/game folders, start on Windows login
+- Logout, cache/game folders, start on login (Windows Run key / Linux XDG autostart)
 - UI language ja / zh-TW (locale JSON files)
 - Download concurrency, rate limit, proxy
 - Log level + log path; rotation fixed in app (not user-configurable)
-- Nest path import confirm-only (no credentials)
+- Nest path import confirm-only (no credentials) — Windows Nest `settings.xml` only
+- Optional Linux **Proton path** override for launching Windows EXEs
 - **Apply changes immediately** (no separate Confirm / OK); network/IO from settings must not block the UI thread
 
 ## Auth
 
-- OAuth on login.dlsite.com → Nest login POST → store SID in OS credentials
+- OAuth on login.dlsite.com → Nest login POST → store SID in OS credentials (Windows Credential Manager / FreeDesktop Secret Service)
+- **Session expiry (M6):** on Nest auth failure (e.g. 401 / login-required body), clear stored SID, surface re-login UI, and pause the download queue until signed in again
+
+## Linux (M5)
+
+- XDG dirs for app data / library / cache / logs
+- Protocol handler + autostart via `.desktop`
+- Launch Windows game EXEs via Proton or Wine; native binaries run directly
+- Ship as **AppImage**
 
 ## i18n
 

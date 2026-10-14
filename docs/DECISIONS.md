@@ -9,9 +9,13 @@
 - **JSON:** `AppJsonContext` source-gen for settings + Nest DTOs (reflection JSON is disabled under AOT — mode/settings save crashed without it).
 - **Fallback:** If linker missing → trimmed self-contained (`PublishAot=false`).
 
-## ADR-002: Linux / Proton later (M5+)
+## ADR-002: Linux / Proton (M5)
 
-- Windows first; platform traits ready; Linux project is stub
+- **Status:** Accepted (updated M5)
+- Windows remains primary ship target; Linux is supported via `DlsiteClient.Platform.Linux`
+- **Secrets:** FreeDesktop Secret Service via `secret-tool` when available; otherwise XDG data file mode `0600` (documented degraded fallback)
+- **Windows games on Linux:** launch `.exe` through Proton (preferred) or Wine; optional `ProtonPath` in settings
+- **Distribution:** AppImage (see `docs/PACKAGING.md`)
 
 ## ADR-003: MD is source of truth
 
@@ -80,3 +84,8 @@
 - Root cause of library freeze after login: sync thumbnail HTTP via `.GetResult()` while building hundreds of rows on the UI thread.
 - Rule: all network/disk/credential/sync IO goes through `UiAsync` (or existing background services). Views only bind state and post UI updates.
 - Library paging default **20** (options 50/100). Settings apply on change (no Confirm). Filters collapsed until expanded. Work-type labels from Nest API + locale fallback.
+
+## ADR-017: Session expiry = M6 (not M5)
+
+- **Status:** Accepted
+- Expired Nest SID currently looks “logged in” until sync/download throws. Full handling (detect → clear creds → re-login prompt → pause queue) is **M6**, after Linux M5.

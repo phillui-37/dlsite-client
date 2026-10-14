@@ -126,6 +126,8 @@
   "settings.nestImportTitle": "Nest 設定の取り込み",
   "settings.applied": "適用しました",
   "settings.working": "処理中…",
+  "settings.linux": "Linux",
+  "settings.protonPath": "Proton パス（空欄で自動検出）",
   "common.yes": "はい",
   "common.no": "いいえ",
   "common.ok": "OK",

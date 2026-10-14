@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=DLsite Client
+Comment=DLsite library client
+Exec=dlsite-client %u
+Icon=dlsite-client
+Terminal=false
+Categories=Game;Utility;
+MimeType=x-scheme-handler/dlsite-client;

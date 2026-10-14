@@ -8,7 +8,8 @@
 | M3 | Download queue, multi-select DL/update, resume, extract triage, rate limit, proxy, isolation | done (Up Next reorder, live slots/proxy, extract triage UX) |
 | M4 | Launcher, protocol, locale, settings (log/proxy/rate), fav/hide, multi-select uninstall | done (protocol→picker, change exe, library Play, live log) |
 | M4.1 | Library perf/UX: off-UI IO, async thumbs, paging 20/50/100, collapsed filters, live settings | done |
-| M5+ | Linux + keyring + Proton/Wine + **AppImage** | backlog (see PACKAGING.md) |
+| M5 | Linux + keyring (libsecret) + Proton/Wine launch + **AppImage** packaging | in progress |
+| M6 | Session expiry: detect Nest 401/auth fail, clear SID, prompt re-login, pause queue | backlog |
 
 ## LM Studio
 

@@ -1,6 +1,7 @@
 namespace DlsiteClient.App
 
 open System
+open System.Diagnostics
 open System.Runtime.InteropServices
 open System.Threading
 open Avalonia
@@ -10,13 +11,29 @@ open DlsiteClient.App.Services
 module Program =
 
     [<DllImport("user32.dll", CharSet = CharSet.Unicode)>]
-    extern int MessageBoxW(nativeint hWnd, string text, string caption, uint32 typ)
+    extern int private MessageBoxW(nativeint hWnd, string text, string caption, uint32 typ)
 
     let private showFatal (title: string) (msg: string) =
-        MessageBoxW(0n, msg, title, 0x10u) |> ignore
+        eprintfn "%s: %s" title msg
+        if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
+            MessageBoxW(0n, msg, title, 0x10u) |> ignore
+        else
+            try
+                let psi =
+                    ProcessStartInfo(
+                        FileName = "zenity",
+                        UseShellExecute = false,
+                        CreateNoWindow = true)
+                psi.ArgumentList.Add("--error")
+                psi.ArgumentList.Add("--title")
+                psi.ArgumentList.Add(title)
+                psi.ArgumentList.Add("--text")
+                psi.ArgumentList.Add(msg)
+                use p = Process.Start(psi)
+                if not (isNull p) then p.WaitForExit(15_000) |> ignore
+            with _ -> ()
 
-    // WebView2 needs STA. Without STAThread, .NET leaves main as MTA and
-    // NativeWebDialog CreateBuilder dies with COMException 0x80010106 (RPC_E_CHANGED_MODE).
+    // WebView2 needs STA on Windows. Harmless on Linux.
     [<STAThread>]
     [<EntryPoint>]
     let main argv =

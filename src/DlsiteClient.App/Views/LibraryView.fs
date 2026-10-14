@@ -1,7 +1,6 @@
 module DlsiteClient.App.Views.LibraryView
 
 open System
-open System.Runtime.InteropServices
 open Avalonia
 open Avalonia.Controls
 open Avalonia.Input
@@ -18,13 +17,6 @@ open DlsiteClient.App.Services
 open DlsiteClient.App.Fmt
 open DlsiteClient.App.ThumbCache
 open DlsiteClient.App.UiAsync
-
-[<DllImport("user32.dll", CharSet = CharSet.Unicode)>]
-extern int private MessageBoxW(nativeint hWnd, string text, string caption, uint32 typ)
-
-let private MB_YESNO = 0x4u
-let private MB_ICONQUESTION = 0x20u
-let private IDYES = 6
 
 // Material-ish data-table column widths (header + row must match).
 let private W_CHECK = 40.0
@@ -321,24 +313,17 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
 
         let confirmUninstall () =
             if selected.Current.IsEmpty then ()
-            else
-                let r =
-                    MessageBoxW(
-                        0n,
-                        t "library.confirmUninstall",
-                        t "library.action.uninstall",
-                        MB_YESNO ||| MB_ICONQUESTION)
-                if r = IDYES then
-                    let ids = selected.Current |> Set.toList
-                    selected.Set Set.empty
-                    runAsyncUnit
-                        (fun () ->
-                            task {
-                                for id in ids do
-                                    do! svc.Library.MarkUninstalledAsync id
-                            })
-                        bump
-                        (fun _ -> bump ())
+            elif svc.Shell.Confirm(t "library.confirmUninstall", t "library.action.uninstall") then
+                let ids = selected.Current |> Set.toList
+                selected.Set Set.empty
+                runAsyncUnit
+                    (fun () ->
+                        task {
+                            for id in ids do
+                                do! svc.Library.MarkUninstalledAsync id
+                        })
+                    bump
+                    (fun _ -> bump ())
 
         let titleWithDlc (w: WorkItem) =
             if w.IsDlc && svc.Library.DlcFeatureEnabled then

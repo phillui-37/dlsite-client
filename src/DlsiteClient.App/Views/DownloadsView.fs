@@ -1,7 +1,6 @@
 module DlsiteClient.App.Views.DownloadsView
 
 open System
-open System.Runtime.InteropServices
 open Avalonia
 open Avalonia.Controls
 open Avalonia.Layout
@@ -14,24 +13,11 @@ open DlsiteClient.App.Localization
 open DlsiteClient.App.Services
 open DlsiteClient.App.Fmt
 
-[<DllImport("user32.dll", CharSet = CharSet.Unicode)>]
-extern int private MessageBoxW(nativeint hWnd, string text, string caption, uint32 typ)
-
-let private MB_YESNO = 0x4u
-let private MB_ICONQUESTION = 0x20u
-let private IDYES = 6
-
 let private fileName (s: string) =
     if String.IsNullOrEmpty s then "" else s
 
 let private confirmRedownload (svc: AppServices) (workno: string) (bump: unit -> unit) =
-    let r =
-        MessageBoxW(
-            0n,
-            t "downloads.corruptArchive",
-            t "downloads.redownload",
-            MB_YESNO ||| MB_ICONQUESTION)
-    if r = IDYES then
+    if svc.Shell.Confirm(t "downloads.corruptArchive", t "downloads.redownload") then
         svc.Downloads.RequestRedownload workno
         bump ()
 
