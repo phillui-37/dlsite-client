@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DlsiteClient.Core.Models;
+using DlsiteClient.Core.Serialization;
 using DlsiteClient.Core.Storage;
 using DlsiteClient.Platform;
 
@@ -38,7 +39,7 @@ public sealed class SettingsService
         }
         else
         {
-            s = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+            s = JsonSerializer.Deserialize(json, AppJsonContext.Default.AppSettings) ?? new AppSettings();
         }
         if (string.IsNullOrWhiteSpace(s.LibraryDirectory))
             s.LibraryDirectory = _paths.DefaultLibraryDirectory;
@@ -54,6 +55,6 @@ public sealed class SettingsService
 
     private void Save()
     {
-        _db.SetSetting("app", JsonSerializer.Serialize(_current));
+        _db.SetSetting("app", JsonSerializer.Serialize(_current, AppJsonContext.Default.AppSettings));
     }
 }

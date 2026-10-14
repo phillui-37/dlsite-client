@@ -6,7 +6,7 @@
 - **Why:** Cross-platform UI; Nest affinity in C#; FuncUI avoids XAML AOT pain; competitive with Tauri on RAM for dense lists
 - **Versions (2026-10-15):** Avalonia **12.1.4** + FuncUI **2.0.0** + WebView **12.1.1** (MIT) + Material.Avalonia **3.21.0**; Microsoft.Extensions / Sqlite **10.0.13**
 - **AOT smoke (2026-10-15):** **PASS** after VS 2026 C++ Desktop tools. Publish with `vcvars64.bat` then `-p:PublishAot=true -r win-x64`. Output: `artifacts/aot-win-x64/`.
-- **Note:** Still has IL2026/IL3050 JSON trim warnings (source-gen cleanup later). Dev builds can stay non-AOT; release prefers AOT when linker present.
+- **JSON:** `AppJsonContext` source-gen for settings + Nest DTOs (reflection JSON is disabled under AOT — mode/settings save crashed without it).
 - **Fallback:** If linker missing → trimmed self-contained (`PublishAot=false`).
 
 ## ADR-002: Linux / Proton later (M5+)

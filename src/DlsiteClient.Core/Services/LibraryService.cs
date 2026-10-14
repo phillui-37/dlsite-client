@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DlsiteClient.Core.Api;
 using DlsiteClient.Core.Models;
+using DlsiteClient.Core.Serialization;
 using DlsiteClient.Core.Storage;
 using Microsoft.Extensions.Logging;
 
@@ -105,7 +106,7 @@ public sealed class LibraryService
                 {
                     if (TryExtractGenres(item, out var genres))
                     {
-                        w.TagsJson = JsonSerializer.Serialize(genres);
+                        w.TagsJson = JsonSerializer.Serialize(genres, AppJsonContext.Default.ListString);
                         _tagsFromProductJson = true;
                         _db.UpsertWorks([w]);
                     }
@@ -189,7 +190,7 @@ public sealed class LibraryService
                     else if (el.ValueKind == JsonValueKind.Object && el.TryGetProperty("name", out var n))
                         names.Add(n.GetString() ?? "");
                 }
-                return JsonSerializer.Serialize(names);
+                return JsonSerializer.Serialize(names, AppJsonContext.Default.ListString);
             }
             return tags.GetRawText();
         }
@@ -224,7 +225,7 @@ public sealed class LibraryService
             return [];
         try
         {
-            var arr = JsonSerializer.Deserialize<string[]>(tagsJson);
+            var arr = JsonSerializer.Deserialize(tagsJson, AppJsonContext.Default.StringArray);
             return arr ?? [];
         }
         catch
