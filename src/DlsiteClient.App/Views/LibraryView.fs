@@ -27,7 +27,7 @@ let private W_MAKER = 120.0
 let private W_TYPE = 110.0
 let private W_RATING = 52.0
 let private W_SALES = 108.0
-let private W_DL = 48.0
+let private W_DL = 100.0
 let private W_SIZE = 80.0
 let private W_UPDATE = 88.0
 
@@ -226,7 +226,11 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                 svc.Library.add_Changed libHandler
                 let thumbSub = subscribe (Action(bumpUi))
                 runPoolAsyncUnit
-                    (fun () -> svc.Library.EnsureWorkTypeNamesAsync())
+                    (fun () ->
+                        task {
+                            do! svc.Library.EnsureWorkTypeNamesAsync()
+                            do! svc.Library.ReconcileLocalInstallsAsync()
+                        })
                     (fun () ->
                         bootstrapping.Set false
                         bumpUi ())

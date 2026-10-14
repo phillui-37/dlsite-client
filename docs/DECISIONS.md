@@ -53,7 +53,7 @@
 ## ADR-012: Packaging
 
 - Windows: AOT folder + **MSI** (WiX) wizard — `scripts/publish-msi.ps1`
-- Linux: **AppImage** in M5+ backlog
+- Linux: **AppImage** (M5) — `scripts/publish-appimage.sh`; see `docs/PACKAGING.md`
 
 ## ADR-013: OAuth = Avalonia WebAuthenticationBroker (MIT WebView)
 
@@ -85,7 +85,15 @@
 - Rule: all network/disk/credential/sync IO goes through `UiAsync` (or existing background services). Views only bind state and post UI updates.
 - Library paging default **20** (options 50/100). Settings apply on change (no Confirm). Filters collapsed until expanded. Work-type labels from Nest API + locale fallback.
 
-## ADR-017: Session expiry = M6 (not M5)
+## ADR-017: Nest library folder layout
+
+- **Status:** Accepted (2026-10-15)
+- Observed Nest `libraryDirectory` tree: `{makerName}/{workName}/` (empty maker dirs ignored).
+- Detect installs by matching purchase `MakerName` + `WorkName` (case-insensitive on Windows; strip invalid path chars). Also accept `{workno}/` from our older extracts.
+- New extracts write Nest layout `{maker}/{work}` so Nest and this client share one tree.
+- Stale `IsDownloaded` cleared when no matching folder remains.
+
+## ADR-018: Session expiry = M6 (not M5)
 
 - **Status:** Accepted
 - Expired Nest SID currently looks “logged in” until sync/download throws. Full handling (detect → clear creds → re-login prompt → pause queue) is **M6**, after Linux M5.

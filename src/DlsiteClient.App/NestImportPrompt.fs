@@ -2,6 +2,7 @@ module DlsiteClient.App.NestImportPrompt
 
 open DlsiteClient.App.Localization
 open DlsiteClient.App.Services
+open DlsiteClient.App.UiAsync
 open DlsiteClient.Platform
 
 let private tryUpdate (svc: AppServices) (mutate: DlsiteClient.Core.Models.AppSettings -> unit) =
@@ -22,6 +23,10 @@ let maybeAsk (svc: AppServices) =
                     s.LibraryDirectory <- paths.LibraryDirectory
                     s.CacheDirectory <- paths.CacheDirectory
                     s.NestImportAsked <- true)
+                runPoolAsyncUnit
+                    (fun () -> svc.Library.ReconcileLocalInstallsAsync())
+                    (fun () -> ())
+                    (fun _ -> ())
             else
                 tryUpdate svc (fun s -> s.NestImportAsked <- true)
         else

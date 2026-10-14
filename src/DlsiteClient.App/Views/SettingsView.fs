@@ -44,6 +44,10 @@ let view () =
             persist (fun s ->
                 s.LibraryDirectory <- lib.Current
                 s.CacheDirectory <- cache.Current)
+            runPoolAsyncUnit
+                (fun () -> svc.Library.ReconcileLocalInstallsAsync())
+                (fun () -> ())
+                (fun _ -> ())
 
         let applyLog () =
             persist (fun s ->
@@ -339,6 +343,10 @@ let view () =
                                 let s = svc.Settings.Current
                                 lib.Set s.LibraryDirectory
                                 cache.Set s.CacheDirectory
+                                runPoolAsyncUnit
+                                    (fun () -> svc.Library.ReconcileLocalInstallsAsync())
+                                    (fun () -> ())
+                                    (fun _ -> ())
                                 status.Set (t "settings.nestImportTitle"))
                         ]
 

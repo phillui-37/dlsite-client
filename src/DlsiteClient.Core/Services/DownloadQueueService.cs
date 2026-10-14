@@ -439,7 +439,13 @@ public sealed class DownloadQueueService : IAsyncDisposable
         }
 
         var libRoot = _settings.Current.LibraryDirectory;
-        var dest = Path.Combine(libRoot, workno);
+        var work = _db.GetWork(workno);
+        var maker = LibraryService.SanitizePathSegment(work?.MakerName);
+        var title = LibraryService.SanitizePathSegment(work?.WorkName);
+        // Nest layout {maker}/{workName}; fall back to workno when metadata missing.
+        var dest = maker.Length > 0 && title.Length > 0
+            ? Path.Combine(libRoot, maker, title)
+            : Path.Combine(libRoot, workno);
         if (Directory.Exists(dest))
         {
             try { Directory.Delete(dest, true); }
@@ -462,7 +468,6 @@ public sealed class DownloadQueueService : IAsyncDisposable
             return;
         }
 
-        var work = _db.GetWork(workno);
         _db.SetDownloaded(workno, true, dest, work?.UpdateDate);
         try
         {
