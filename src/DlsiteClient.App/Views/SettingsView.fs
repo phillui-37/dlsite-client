@@ -1,6 +1,7 @@
 module DlsiteClient.App.Views.SettingsView
 
 open System
+open System.Runtime.InteropServices
 open Avalonia.Controls
 open Avalonia.Layout
 open Avalonia.Media
@@ -28,11 +29,13 @@ let view () =
         let rate = ctx.useState (string s0.RateLimitMBps)
         let proxyMode = ctx.useState s0.ProxyMode
         let proxyUrl = ctx.useState (if isNull s0.ProxyUrl then "" else s0.ProxyUrl)
+        let protonPath = ctx.useState (if isNull s0.ProtonPath then "" else s0.ProtonPath)
         let startLogin = ctx.useState s0.StartOnLogin
         let status = ctx.useState ""
         let sidInput = ctx.useState ""
         let busy = ctx.useState false
         let debounce = debounce 400
+        let onLinux = RuntimeInformation.IsOSPlatform OSPlatform.Linux
 
         let persist (mutate: DlsiteClient.Core.Models.AppSettings -> unit) =
             svc.Settings.Update mutate
@@ -283,6 +286,25 @@ let view () =
                                 proxyUrl.Set s
                                 debounce applyDownload)
                         ]
+
+                        if onLinux then
+                            TextBlock.create [
+                                TextBlock.text (t "settings.linux")
+                                TextBlock.fontSize 18.0
+                                TextBlock.fontWeight FontWeight.Bold
+                            ]
+                            TextBlock.create [ TextBlock.text (t "settings.protonPath") ]
+                            TextBox.create [
+                                TextBox.watermark "/path/to/Proton/proton"
+                                TextBox.text protonPath.Current
+                                TextBox.onTextChanged (fun s ->
+                                    protonPath.Set s
+                                    debounce (fun () ->
+                                        persist (fun st ->
+                                            st.ProtonPath <-
+                                                if String.IsNullOrWhiteSpace protonPath.Current then null
+                                                else protonPath.Current)))
+                            ]
 
                         TextBlock.create [
                             TextBlock.text (t "settings.logging")

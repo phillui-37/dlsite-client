@@ -11,6 +11,7 @@ open DlsiteClient.Core
 open DlsiteClient.Core.Services
 open DlsiteClient.Platform
 open DlsiteClient.Platform.Windows
+open DlsiteClient.Platform.Linux
 open DlsiteClient.App.Localization
 
 type AppServices =
@@ -49,8 +50,14 @@ let private bootstrapLogger (logDir: string) (level: string) =
                 retainedFileCountLimit = Nullable 14)
             .CreateLogger()
 
+let private isWindows = RuntimeInformation.IsOSPlatform OSPlatform.Windows
+let private isLinux = RuntimeInformation.IsOSPlatform OSPlatform.Linux
+
 let build (_args: string[]) : AppServices =
-    let paths: IPathConfig = WindowsPathConfig() :> IPathConfig
+    let paths: IPathConfig =
+        if isLinux then LinuxPathConfig() :> IPathConfig
+        else WindowsPathConfig() :> IPathConfig
+
     Directory.CreateDirectory paths.AppDataRoot |> ignore
     bootstrapLogger paths.DefaultLogDirectory "Information"
 
@@ -65,18 +72,29 @@ let build (_args: string[]) : AppServices =
     sc.AddLogging(fun b ->
         b.ClearProviders() |> ignore
         b.AddSerilog(dispose = true) |> ignore) |> ignore
-    sc.AddSingleton<ICredentialStore, WindowsCredentialStore>() |> ignore
-    sc.AddSingleton<INestSettingsImporter, WindowsNestSettingsImporter>() |> ignore
-    sc.AddSingleton<IProtocolHandler, WindowsProtocolHandler>() |> ignore
-    sc.AddSingleton<IProcessLocale, WindowsProcessLocale>() |> ignore
-    sc.AddSingleton<IStartupRegistration, WindowsStartupRegistration>() |> ignore
-    sc.AddSingleton<IShell, WindowsShell>() |> ignore
+
+    if isLinux then
+        sc.AddSingleton<ICredentialStore, LinuxCredentialStore>() |> ignore
+        sc.AddSingleton<INestSettingsImporter, LinuxNestSettingsImporter>() |> ignore
+        sc.AddSingleton<IProtocolHandler, LinuxProtocolHandler>() |> ignore
+        sc.AddSingleton<IStartupRegistration, LinuxStartupRegistration>() |> ignore
+        sc.AddSingleton<IShell, LinuxShell>() |> ignore
+        sc.AddSingleton<IProcessLocale>(fun sp ->
+            let settings = sp.GetRequiredService<SettingsService>()
+            LinuxProcessLocale(fun () -> settings.Current.ProtonPath) :> IProcessLocale) |> ignore
+    else
+        sc.AddSingleton<ICredentialStore, WindowsCredentialStore>() |> ignore
+        sc.AddSingleton<INestSettingsImporter, WindowsNestSettingsImporter>() |> ignore
+        sc.AddSingleton<IProtocolHandler, WindowsProtocolHandler>() |> ignore
+        sc.AddSingleton<IProcessLocale, WindowsProcessLocale>() |> ignore
+        sc.AddSingleton<IStartupRegistration, WindowsStartupRegistration>() |> ignore
+        sc.AddSingleton<IShell, WindowsShell>() |> ignore
+
     sc.AddDlsiteCore(paths) |> ignore
 
     let sp = sc.BuildServiceProvider()
     let settings = sp.GetRequiredService<SettingsService>()
 
-    // Re-init logger with user path/level
     bootstrapLogger settings.Current.LogDirectory settings.Current.LogLevel
     globalI18n.Load(settings.Current.UiLocale, localesDir)
 
@@ -84,10 +102,9 @@ let build (_args: string[]) : AppServices =
     auth.RestoreAsync().GetAwaiter().GetResult()
 
     let protocol = sp.GetRequiredService<IProtocolHandler>()
-    if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
-        match Environment.ProcessPath with
-        | null -> ()
-        | exe -> protocol.Register(WindowsProtocolHandler.Scheme, exe)
+    match Environment.ProcessPath with
+    | null -> ()
+    | exe -> protocol.Register(AppProtocol.Scheme, exe)
 
     { Provider = sp
       Auth = auth

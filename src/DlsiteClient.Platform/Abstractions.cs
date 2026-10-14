@@ -43,4 +43,13 @@ public interface IShell
 {
     void OpenFolder(string path);
     void OpenUrl(string url);
+
+    /// <summary>Yes/No confirm dialog. Returns true when the user accepts.</summary>
+    bool Confirm(string message, string title);
+}
+
+/// <summary>Shared custom URL scheme.</summary>
+public static class AppProtocol
+{
+    public const string Scheme = "dlsite-client";
 }

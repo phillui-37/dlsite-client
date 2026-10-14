@@ -80,6 +80,9 @@ public sealed class AppSettings
     /// <summary>Library page size: 20 (default), 50, or 100.</summary>
     public int LibraryPageSize { get; set; } = 20;
     public bool NestImportAsked { get; set; }
+
+    /// <summary>Optional absolute path to a Proton build (Linux). Empty = auto-detect.</summary>
+    public string? ProtonPath { get; set; }
 }
 
 public enum DownloadJobState

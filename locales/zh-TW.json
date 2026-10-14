@@ -126,6 +126,8 @@
   "settings.nestImportTitle": "匯入 Nest 設定",
   "settings.applied": "已套用",
   "settings.working": "處理中…",
+  "settings.linux": "Linux",
+  "settings.protonPath": "Proton 路徑（留空自動偵測）",
   "common.yes": "是",
   "common.no": "否",
   "common.ok": "確定",

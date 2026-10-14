@@ -160,8 +160,6 @@ public sealed class WindowsNestSettingsImporter(ILogger<WindowsNestSettingsImpor
 [SupportedOSPlatform("windows")]
 public sealed class WindowsProtocolHandler : IProtocolHandler
 {
-    public const string Scheme = "dlsite-client";
-
     public void Register(string scheme, string exePath)
     {
         using var key = Registry.CurrentUser.CreateSubKey($@"Software\Classes\{scheme}");
@@ -176,7 +174,7 @@ public sealed class WindowsProtocolHandler : IProtocolHandler
         workno = null;
         foreach (var a in args)
         {
-            if (!a.StartsWith($"{Scheme}://", StringComparison.OrdinalIgnoreCase))
+            if (!a.StartsWith($"{AppProtocol.Scheme}://", StringComparison.OrdinalIgnoreCase))
                 continue;
             var uri = new Uri(a);
             if (!string.Equals(uri.Host, "play", StringComparison.OrdinalIgnoreCase))
@@ -248,6 +246,9 @@ public sealed class WindowsStartupRegistration : IStartupRegistration
 [SupportedOSPlatform("windows")]
 public sealed class WindowsShell : IShell
 {
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int MessageBoxW(IntPtr hWnd, string text, string caption, uint type);
+
     public void OpenFolder(string path)
     {
         Directory.CreateDirectory(path);
@@ -256,4 +257,7 @@ public sealed class WindowsShell : IShell
 
     public void OpenUrl(string url) =>
         Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+
+    public bool Confirm(string message, string title) =>
+        MessageBoxW(IntPtr.Zero, message, title, 0x4u | 0x20u) == 6; // MB_YESNO | MB_ICONQUESTION → IDYES
 }

@@ -9,9 +9,13 @@
 - **JSON:** `AppJsonContext` source-gen for settings + Nest DTOs (reflection JSON is disabled under AOT — mode/settings save crashed without it).
 - **Fallback:** If linker missing → trimmed self-contained (`PublishAot=false`).
 
-## ADR-002: Linux / Proton later (M5+)
+## ADR-002: Linux / Proton (M5)
 
-- Windows first; platform traits ready; Linux project is stub
+- **Status:** Accepted (updated M5)
+- Windows remains primary ship target; Linux is supported via `DlsiteClient.Platform.Linux`
+- **Secrets:** FreeDesktop Secret Service via `secret-tool` when available; otherwise XDG data file mode `0600` (documented degraded fallback)
+- **Windows games on Linux:** launch `.exe` through Proton (preferred) or Wine; optional `ProtonPath` in settings
+- **Distribution:** AppImage (see `docs/PACKAGING.md`)
 
 ## ADR-003: MD is source of truth
 
@@ -49,7 +53,7 @@
 ## ADR-012: Packaging
 
 - Windows: AOT folder + **MSI** (WiX) wizard — `scripts/publish-msi.ps1`
-- Linux: **AppImage** in M5+ backlog
+- Linux: **AppImage** (M5) — `scripts/publish-appimage.sh`; see `docs/PACKAGING.md`
 
 ## ADR-013: OAuth = Avalonia WebAuthenticationBroker (MIT WebView)
 
@@ -88,3 +92,8 @@
 - Detect installs by matching purchase `MakerName` + `WorkName` (case-insensitive on Windows; strip invalid path chars). Also accept `{workno}/` from our older extracts.
 - New extracts write Nest layout `{maker}/{work}` so Nest and this client share one tree.
 - Stale `IsDownloaded` cleared when no matching folder remains.
+
+## ADR-018: Session expiry = M6 (not M5)
+
+- **Status:** Accepted
+- Expired Nest SID currently looks “logged in” until sync/download throws. Full handling (detect → clear creds → re-login prompt → pause queue) is **M6**, after Linux M5.
