@@ -45,6 +45,7 @@
   "library.action.install": "安裝",
   "library.empty": "沒有作品",
   "library.count": "{0} 件作品",
+  "library.selectedCount": "已選 {0} 件",
   "library.confirmUninstall": "要解除安裝選取的作品嗎？",
   "library.dlcBadge": "DLC",
   "library.tagFilter": "標籤",

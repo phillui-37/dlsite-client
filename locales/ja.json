@@ -45,6 +45,7 @@
   "library.action.install": "インストール",
   "library.empty": "作品がありません",
   "library.count": "{0}作品",
+  "library.selectedCount": "{0}件選択中",
   "library.confirmUninstall": "選択した作品をアンインストールしますか？",
   "library.dlcBadge": "DLC",
   "library.tagFilter": "タグ",
