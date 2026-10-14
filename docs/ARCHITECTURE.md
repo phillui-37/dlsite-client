@@ -27,6 +27,10 @@ SQLite under app data: purchases cache, fav/hide, install paths, exe choice, que
 
 `__DLsite_SID` / tokens in OS credential store only.
 
+## Session expiry
+
+Nest 401/403 (or `meta.code` 401/403) → `NestSessionExpiredException` → clear credential store + in-memory SID → pause download pump until re-login → UI banner.
+
 ## Download / extract isolation
 
 - Background workers + channels; UI observes events only

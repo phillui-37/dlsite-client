@@ -93,7 +93,10 @@
 - New extracts write Nest layout `{maker}/{work}` so Nest and this client share one tree.
 - Stale `IsDownloaded` cleared when no matching folder remains.
 
-## ADR-018: Session expiry = M6 (not M5)
+## ADR-018: Session expiry handling (M6)
 
-- **Status:** Accepted
-- Expired Nest SID currently looks “logged in” until sync/download throws. Full handling (detect → clear creds → re-login prompt → pause queue) is **M6**, after Linux M5.
+- **Status:** Accepted (M6)
+- Detect Nest auth failure on authed calls: HTTP **401/403**, or JSON `meta.code` **401/403**.
+- Raise `NestSessionExpiredException` → `AuthSession.InvalidateLocalSessionAsync` clears in-memory SID + OS credential store (no Nest DELETE; session already dead).
+- `DownloadQueueService` sets an auth-pause gate (skips pump, cancels active downloads); jobs stay **Queued** so they resume after re-login. User-**Paused** jobs stay paused.
+- UI shows a re-login banner (`NeedsRelogin`) until OAuth/SID login succeeds.
