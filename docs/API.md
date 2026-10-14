@@ -29,6 +29,8 @@ Exact flow from Nest `LoginWindow` (WebView2):
 
 Client: Avalonia `WebAuthenticationBroker` (`Avalonia.Controls.WebView` 12.1.x MIT) + `NestOidc` / `AuthSession.LoginWithOidcAsync`. Manual SID paste remains as debug fallback.
 
+**Session expiry (M6):** authed Nest calls treat HTTP 401/403 (and JSON `meta.code` 401/403) as expired SID → clear local credentials, pause download queue, prompt re-login. Binary download URLs use the same HTTP status check.
+
 ## Library
 
 - `GET /home/api/native-app/nest/purchases?locale&page` → `Product[]`

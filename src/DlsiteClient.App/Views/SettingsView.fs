@@ -40,6 +40,9 @@ let view () =
         let persist (mutate: DlsiteClient.Core.Models.AppSettings -> unit) =
             svc.Settings.Update mutate
 
+        let errMsg (ex: exn) =
+            if svc.Auth.NeedsRelogin then t "auth.sessionExpired" else ex.Message
+
         let applyPaths () =
             persist (fun s ->
                 s.LibraryDirectory <- lib.Current
@@ -124,14 +127,14 @@ let view () =
                                                             status.Set (t "auth.synced"))
                                                         (fun ex ->
                                                             busy.Set false
-                                                            status.Set ex.Message)
+                                                            status.Set (errMsg ex))
                                                 elif r = "cancelled" then
                                                     status.Set (t "auth.cancelled")
                                                 else
                                                     status.Set r)
                                             (fun ex ->
                                                 busy.Set false
-                                                status.Set ex.Message))
+                                                status.Set (errMsg ex)))
                                 ]
                                 Button.create [
                                     Button.content (t "auth.logout")
@@ -145,7 +148,7 @@ let view () =
                                                 status.Set (t "auth.logout"))
                                             (fun ex ->
                                                 busy.Set false
-                                                status.Set ex.Message))
+                                                status.Set (errMsg ex)))
                                 ]
                                 Button.create [
                                     Button.content (t "auth.sync")
@@ -160,7 +163,7 @@ let view () =
                                                 status.Set (t "auth.synced"))
                                             (fun ex ->
                                                 busy.Set false
-                                                status.Set ex.Message))
+                                                status.Set (errMsg ex)))
                                 ]
                             ]
                         ]
@@ -194,10 +197,10 @@ let view () =
                                                     status.Set (t "auth.synced"))
                                                 (fun ex ->
                                                     busy.Set false
-                                                    status.Set ex.Message))
+                                                    status.Set (errMsg ex)))
                                         (fun ex ->
                                             busy.Set false
-                                            status.Set ex.Message))
+                                            status.Set (errMsg ex)))
                         ]
 
                         TextBlock.create [

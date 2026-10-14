@@ -156,6 +156,12 @@ let view () =
                                             (sizeBps svc.Downloads.MaxSpeedBps) (t "downloads.maxSpeed")
                                             (sizePlain svc.Downloads.SessionBytes) (t "downloads.total"))
                                 ]
+                                if svc.Downloads.IsPausedForAuth || svc.Auth.NeedsRelogin then
+                                    TextBlock.create [
+                                        TextBlock.text (t "auth.queuePaused")
+                                        TextBlock.foreground "#E65100"
+                                        TextBlock.margin (0.0, 4.0, 0.0, 0.0)
+                                    ]
                             ]
                         ])
                 ]

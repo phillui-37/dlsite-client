@@ -11,6 +11,7 @@ namespace DlsiteClient.Core.Services;
 public sealed class DownloadQueueService : IAsyncDisposable
 {
     private readonly DlsiteApiClient _api;
+    private readonly AuthSession _auth;
     private readonly SettingsService _settings;
     private readonly LibraryDatabase _db;
     private readonly LibraryService _library;
@@ -26,9 +27,11 @@ public sealed class DownloadQueueService : IAsyncDisposable
     private readonly Task _loop;
     private readonly CancellationTokenSource _runCts = new();
     private long _lastProgressPersistTicks;
+    private volatile bool _pausedForAuth;
 
     public DownloadQueueService(
         DlsiteApiClient api,
+        AuthSession auth,
         SettingsService settings,
         LibraryDatabase db,
         LibraryService library,
@@ -36,6 +39,7 @@ public sealed class DownloadQueueService : IAsyncDisposable
         ILogger<DownloadQueueService> logger)
     {
         _api = api;
+        _auth = auth;
         _settings = settings;
         _db = db;
         _library = library;
@@ -45,6 +49,8 @@ public sealed class DownloadQueueService : IAsyncDisposable
         _extractSlots = new ConcurrencyGate(settings.Current.MaxConcurrentExtracts);
         ApplyProxyFromSettings();
         _settings.Changed += OnSettingsChanged;
+        _auth.SessionExpired += OnSessionExpired;
+        _auth.Changed += OnAuthChanged;
         foreach (var j in db.LoadDownloadJobs())
         {
             if (j.State is DownloadJobState.Downloading or DownloadJobState.Extracting)
@@ -59,6 +65,9 @@ public sealed class DownloadQueueService : IAsyncDisposable
     public double CurrentSpeedBps { get; private set; }
     public double MaxSpeedBps { get; private set; }
     public long SessionBytes { get; private set; }
+
+    /// <summary>True while Nest session is expired; pump will not start new downloads.</summary>
+    public bool IsPausedForAuth => _pausedForAuth;
 
     public IReadOnlyList<DownloadJob> Active =>
         Snapshot(j => j.State is DownloadJobState.Downloading or DownloadJobState.Extracting);
@@ -252,6 +261,38 @@ public sealed class DownloadQueueService : IAsyncDisposable
         _wake.Writer.TryWrite("settings");
     }
 
+    private void OnSessionExpired() => PauseForAuth();
+
+    private void OnAuthChanged()
+    {
+        if (_auth.IsLoggedIn)
+        {
+            if (_pausedForAuth)
+            {
+                _pausedForAuth = false;
+                _logger.LogInformation("Auth restored; resuming download queue");
+            }
+            Notify();
+            _wake.Writer.TryWrite("auth-resumed");
+        }
+        else
+        {
+            Notify();
+        }
+    }
+
+    /// <summary>Cancel active downloads and stop the pump until re-login.</summary>
+    public void PauseForAuth()
+    {
+        _pausedForAuth = true;
+        foreach (var cts in _cts.Values)
+        {
+            try { cts.Cancel(); }
+            catch { /* ignore */ }
+        }
+        Notify();
+    }
+
     private void ApplyProxyFromSettings() =>
         _api.ConfigureProxy(_settings.Current.ProxyMode, _settings.Current.ProxyUrl);
 
@@ -269,13 +310,16 @@ public sealed class DownloadQueueService : IAsyncDisposable
 
     private async Task PumpAsync(CancellationToken ct)
     {
+        if (_pausedForAuth || !_auth.IsLoggedIn)
+            return;
+
         List<DownloadJob> queued;
         lock (_gate)
             queued = _jobs.Where(j => j.State == DownloadJobState.Queued).OrderBy(j => j.QueueOrder).ToList();
 
         foreach (var job in queued)
         {
-            if (ct.IsCancellationRequested) break;
+            if (ct.IsCancellationRequested || _pausedForAuth) break;
             _ = Task.Run(() => RunJobAsync(job.Workno, ct), ct);
         }
     }
@@ -314,6 +358,19 @@ public sealed class DownloadQueueService : IAsyncDisposable
             {
                 _extractSlots.Release();
             }
+        }
+        catch (NestSessionExpiredException ex)
+        {
+            _logger.LogWarning(ex, "Session expired during job {Workno}", workno);
+            await _auth.InvalidateLocalSessionAsync().ConfigureAwait(false);
+            lock (_gate)
+            {
+                var j = _jobs.FirstOrDefault(x => x.Workno == workno);
+                if (j is not null && j.State != DownloadJobState.Paused)
+                    j.State = DownloadJobState.Queued;
+                Persist(force: true);
+            }
+            Notify();
         }
         catch (OperationCanceledException)
         {
@@ -380,6 +437,7 @@ public sealed class DownloadQueueService : IAsyncDisposable
                 done += existing;
                 continue;
             }
+            DlsiteApiClient.EnsureAuthedStatus(res);
             res.EnsureSuccessStatusCode();
             var append = res.StatusCode == System.Net.HttpStatusCode.PartialContent;
             await using var input = await res.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
@@ -551,6 +609,8 @@ public sealed class DownloadQueueService : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _settings.Changed -= OnSettingsChanged;
+        _auth.SessionExpired -= OnSessionExpired;
+        _auth.Changed -= OnAuthChanged;
         _runCts.Cancel();
         _wake.Writer.TryComplete();
         try { await _loop.ConfigureAwait(false); } catch { /* ignore */ }

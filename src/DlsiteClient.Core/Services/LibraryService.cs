@@ -11,6 +11,7 @@ public sealed class LibraryService
 {
     private readonly LibraryDatabase _db;
     private readonly DlsiteApiClient _api;
+    private readonly AuthSession _auth;
     private readonly SettingsService _settings;
     private readonly ILogger<LibraryService> _logger;
     private List<WorkItem> _cache = [];
@@ -21,11 +22,13 @@ public sealed class LibraryService
     public LibraryService(
         LibraryDatabase db,
         DlsiteApiClient api,
+        AuthSession auth,
         SettingsService settings,
         ILogger<LibraryService> logger)
     {
         _db = db;
         _api = api;
+        _auth = auth;
         _settings = settings;
         _logger = logger;
         Reload();
@@ -43,50 +46,58 @@ public sealed class LibraryService
 
     public async Task SyncPurchasesAsync(CancellationToken ct = default)
     {
-        var locale = _settings.Current.ApiLocale;
-        var products = await _api.FetchAllPurchasesAsync(locale, ct).ConfigureAwait(false);
-        _logger.LogInformation("Fetched {Count} purchases", products.Count);
-
-        var existing = _db.GetAllWorks().ToDictionary(w => w.Workno);
-        var mapped = new List<WorkItem>();
-        var tagShapeLogged = false;
-
-        foreach (var p in products)
+        try
         {
-            if (string.IsNullOrWhiteSpace(p.Workno)) continue;
-            existing.TryGetValue(p.Workno, out var prev);
-            var tagsJson = NormalizeTags(p.Tags, ref tagShapeLogged);
-            mapped.Add(new WorkItem
-            {
-                Workno = p.Workno,
-                WorkName = p.WorkName ?? "",
-                MakerName = p.MakerName ?? "",
-                WorkType = p.WorkType ?? "",
-                SiteId = p.SiteId ?? "",
-                ContentsFileSize = p.ContentsFileSize,
-                Point = p.Point,
-                RegistDate = p.RegistDate,
-                SalesDate = p.SalesDate,
-                UpdateDate = p.UpdateDate,
-                ThumbUrl = p.ImageUrls?.Thum ?? p.ImageUrls?.Main,
-                MainImageUrl = p.ImageUrls?.Main,
-                TagsJson = tagsJson,
-                IsFavorite = prev?.IsFavorite ?? false,
-                IsHidden = prev?.IsHidden ?? false,
-                IsDownloaded = prev?.IsDownloaded ?? false,
-                InstallPath = prev?.InstallPath,
-                SelectedExe = prev?.SelectedExe,
-                UseJapanLocale = prev?.UseJapanLocale ?? false,
-                LocalUpdateDate = prev?.LocalUpdateDate,
-                ParentWorkno = prev?.ParentWorkno,
-                IsDlc = prev?.IsDlc ?? false
-            });
-        }
+            var locale = _settings.Current.ApiLocale;
+            var products = await _api.FetchAllPurchasesAsync(locale, ct).ConfigureAwait(false);
+            _logger.LogInformation("Fetched {Count} purchases", products.Count);
 
-        _db.UpsertWorks(mapped);
-        await EnsureWorkTypeNamesAsync(ct).ConfigureAwait(false);
-        await EnrichSampleMetadataAsync(mapped.Take(5).ToList(), ct).ConfigureAwait(false);
-        await ReconcileLocalInstallsAsync(ct).ConfigureAwait(false);
+            var existing = _db.GetAllWorks().ToDictionary(w => w.Workno);
+            var mapped = new List<WorkItem>();
+            var tagShapeLogged = false;
+
+            foreach (var p in products)
+            {
+                if (string.IsNullOrWhiteSpace(p.Workno)) continue;
+                existing.TryGetValue(p.Workno, out var prev);
+                var tagsJson = NormalizeTags(p.Tags, ref tagShapeLogged);
+                mapped.Add(new WorkItem
+                {
+                    Workno = p.Workno,
+                    WorkName = p.WorkName ?? "",
+                    MakerName = p.MakerName ?? "",
+                    WorkType = p.WorkType ?? "",
+                    SiteId = p.SiteId ?? "",
+                    ContentsFileSize = p.ContentsFileSize,
+                    Point = p.Point,
+                    RegistDate = p.RegistDate,
+                    SalesDate = p.SalesDate,
+                    UpdateDate = p.UpdateDate,
+                    ThumbUrl = p.ImageUrls?.Thum ?? p.ImageUrls?.Main,
+                    MainImageUrl = p.ImageUrls?.Main,
+                    TagsJson = tagsJson,
+                    IsFavorite = prev?.IsFavorite ?? false,
+                    IsHidden = prev?.IsHidden ?? false,
+                    IsDownloaded = prev?.IsDownloaded ?? false,
+                    InstallPath = prev?.InstallPath,
+                    SelectedExe = prev?.SelectedExe,
+                    UseJapanLocale = prev?.UseJapanLocale ?? false,
+                    LocalUpdateDate = prev?.LocalUpdateDate,
+                    ParentWorkno = prev?.ParentWorkno,
+                    IsDlc = prev?.IsDlc ?? false
+                });
+            }
+
+            _db.UpsertWorks(mapped);
+            await EnsureWorkTypeNamesAsync(ct).ConfigureAwait(false);
+            await EnrichSampleMetadataAsync(mapped.Take(5).ToList(), ct).ConfigureAwait(false);
+            await ReconcileLocalInstallsAsync(ct).ConfigureAwait(false);
+        }
+        catch (NestSessionExpiredException)
+        {
+            await _auth.InvalidateLocalSessionAsync(ct).ConfigureAwait(false);
+            throw;
+        }
     }
 
     /// <summary>

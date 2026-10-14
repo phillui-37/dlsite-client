@@ -9,7 +9,7 @@
 | M4 | Launcher, protocol, locale, settings (log/proxy/rate), fav/hide, multi-select uninstall | done (protocol→picker, change exe, library Play, live log) |
 | M4.1 | Library perf/UX: off-UI IO, async thumbs, paging 20/50/100, collapsed filters, live settings | done |
 | M5 | Linux + keyring (libsecret) + Proton/Wine launch + **AppImage** packaging | done |
-| M6 | Session expiry: detect Nest 401/auth fail, clear SID, prompt re-login, pause queue | backlog |
+| M6 | Session expiry: detect Nest 401/auth fail, clear SID, prompt re-login, pause queue | done |
 
 ## LM Studio
 

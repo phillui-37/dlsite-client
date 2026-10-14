@@ -103,10 +103,12 @@ public sealed class DlsiteApiClient
         var url = $"{ApiBase}/home/api/native-app/nest/purchases?locale={Uri.EscapeDataString(locale)}&page={page}";
         using var req = CreateAuthedGet(url);
         using var res = await SendAsync(req, ct).ConfigureAwait(false);
+        EnsureAuthedStatus(res);
         res.EnsureSuccessStatusCode();
         await using var stream = await res.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
         var dto = await JsonSerializer.DeserializeAsync(stream, AppJsonContext.Default.PurchaseListResponseDto, ct)
             .ConfigureAwait(false);
+        ThrowIfAuthMeta(dto?.Meta);
         return dto?.Data?.Purchases ?? [];
     }
 
@@ -120,10 +122,12 @@ public sealed class DlsiteApiClient
             $"{ApiBase}/home/api/native-app/nest/product/detail?workno={Uri.EscapeDataString(workno)}&locale={Uri.EscapeDataString(locale)}&is_ana=0&fields={Uri.EscapeDataString(fields)}";
         using var req = CreateAuthedGet(url);
         using var res = await SendAsync(req, ct).ConfigureAwait(false);
+        EnsureAuthedStatus(res);
         res.EnsureSuccessStatusCode();
         await using var stream = await res.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
         var dto = await JsonSerializer.DeserializeAsync(stream, AppJsonContext.Default.ProductDetailEnvelopeDto, ct)
             .ConfigureAwait(false);
+        ThrowIfAuthMeta(dto?.Meta);
         return dto?.Data?.FirstOrDefault();
     }
 
@@ -197,6 +201,26 @@ public sealed class DlsiteApiClient
     {
         if (string.IsNullOrEmpty(_sessionId))
             throw new InvalidOperationException("Not logged in");
+    }
+
+    /// <summary>Throw when Nest rejects the session cookie.</summary>
+    public static void EnsureAuthedStatus(HttpResponseMessage res)
+    {
+        if (res.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            throw new NestSessionExpiredException(
+                String.Format("Nest session rejected (HTTP {0})", (int)res.StatusCode));
+        }
+    }
+
+    private static void ThrowIfAuthMeta(MetaDto? meta)
+    {
+        if (meta is null) return;
+        if (meta.Code is 401 or 403)
+        {
+            throw new NestSessionExpiredException(
+                String.Format("Nest session rejected (meta.code {0})", meta.Code));
+        }
     }
 
     private async Task<HttpResponseMessage> SendAsync(HttpRequestMessage req, CancellationToken ct)
