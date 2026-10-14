@@ -58,6 +58,7 @@ let view () =
                 s.StartOnLogin <- startLogin.Current)
             svc.Startup.SetEnabled startLogin.Current
             globalI18n.Load(locale.Current, svc.LocalesDir)
+            applyLogSettings logPath.Current logLevel.Current
             status.Set "OK"
 
         ScrollViewer.create [

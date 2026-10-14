@@ -7,7 +7,7 @@
 | `DlsiteClient.App` | F# | Avalonia.FuncUI Elmish UI |
 | `DlsiteClient.Core` | C# | API, DB, queue, extract, launcher |
 | `DlsiteClient.Platform` | C# | Abstractions |
-| `DlsiteClient.Platform.Windows` | C# | Creds, Nest import, protocol, JP locale, startup |
+| `DlsiteClient.Platform.Windows` | C# | Creds, Nest import, protocol (`dlsite-client://play/{workno}`), soft JP locale env, startup |
 | `DlsiteClient.Platform.Linux` | C# | Stub until M5 |
 
 ## Data flow

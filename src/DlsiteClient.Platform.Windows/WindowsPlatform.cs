@@ -201,9 +201,10 @@ public sealed class WindowsProcessLocale : IProcessLocale
         };
         if (useJapanLocale)
         {
-            // Soft locale hint for child; full AppLocale emulation is OS-dependent.
+            // Soft locale hint (ADR-015); full AppLocale emulation is out of scope.
             psi.Environment["LANG"] = "ja_JP.UTF-8";
             psi.Environment["LC_ALL"] = "ja_JP.UTF-8";
+            psi.Environment["LANGUAGE"] = "ja_JP:ja";
         }
         else if (!string.IsNullOrWhiteSpace(localeName))
         {

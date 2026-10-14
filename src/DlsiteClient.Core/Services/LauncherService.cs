@@ -55,22 +55,56 @@ public sealed class LauncherService
 
     public void ConfirmAndLaunch(string workno, string exePath, bool always, bool useJapanLocale)
     {
-        if (always)
+        var work = _db.GetWork(workno) ?? throw new InvalidOperationException("Work not found");
+        // Persist when asked, or remember first successful choice so protocol launches work next time.
+        if (always || string.IsNullOrEmpty(work.SelectedExe))
             _db.SetSelectedExe(workno, exePath, useJapanLocale);
-        var work = _db.GetWork(workno)!;
+        else
+            _db.SetSelectedExe(workno, work.SelectedExe, useJapanLocale);
+
         var wd = Path.GetDirectoryName(exePath) ?? work.InstallPath!;
         _logger.LogInformation("Launching {Exe} for {Workno}", exePath, workno);
         _process.StartWithLocale(exePath, wd, null, useJapanLocale);
     }
 
-    public void LaunchReady(string workno)
+    /// <summary>
+    /// Protocol / CLI entry: launch if a single exe (or saved choice) is ready;
+    /// otherwise return NeedsChoice so the UI can open the picker.
+    /// </summary>
+    public ProtocolLaunchResult TryProtocolLaunch(string workno)
     {
-        var d = PrepareLaunch(workno);
-        if (!d.NeedsUserChoice)
+        try
+        {
+            var d = PrepareLaunch(workno);
+            if (d.NeedsUserChoice)
+                return ProtocolLaunchResult.NeedsChoice;
             ConfirmAndLaunch(workno, d.ExePath!, always: false, d.UseJapanLocale);
-        else
-            throw new InvalidOperationException("Needs exe choice");
+            return ProtocolLaunchResult.Launched;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Protocol launch failed for {Workno}", workno);
+            return ProtocolLaunchResult.Failed(ex.Message);
+        }
     }
+}
+
+public enum ProtocolLaunchKind
+{
+    Launched,
+    NeedsChoice,
+    Failed
+}
+
+public readonly struct ProtocolLaunchResult
+{
+    public ProtocolLaunchKind Kind { get; init; }
+    public string? Error { get; init; }
+
+    public static ProtocolLaunchResult Launched => new() { Kind = ProtocolLaunchKind.Launched };
+    public static ProtocolLaunchResult NeedsChoice => new() { Kind = ProtocolLaunchKind.NeedsChoice };
+    public static ProtocolLaunchResult Failed(string error) =>
+        new() { Kind = ProtocolLaunchKind.Failed, Error = error };
 }
 
 public sealed class LaunchDecision
