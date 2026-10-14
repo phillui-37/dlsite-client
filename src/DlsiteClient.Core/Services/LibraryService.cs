@@ -200,6 +200,25 @@ public sealed class LibraryService
         }
     }
 
+    public IReadOnlyList<string> DistinctWorkTypes() =>
+        _cache.Select(w => w.WorkType)
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(t => t, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    public IReadOnlyList<string> DistinctTags()
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var w in _cache)
+        {
+            foreach (var tag in ParseTags(w.TagsJson))
+                if (!string.IsNullOrWhiteSpace(tag))
+                    set.Add(tag);
+        }
+        return set.OrderBy(t => t, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
     public static IReadOnlyList<string> ParseTags(string? tagsJson)
     {
         if (string.IsNullOrWhiteSpace(tagsJson) || tagsJson == "[]")
@@ -221,13 +240,19 @@ public sealed class LibraryService
         bool favoritesOnly,
         bool showHidden,
         bool downloadedOnly,
-        string? tagFilter)
+        string? tagFilter,
+        IReadOnlyCollection<string>? workTypeFilter = null)
     {
         IEnumerable<WorkItem> q = _cache;
         if (!showHidden) q = q.Where(w => !w.IsHidden);
         if (favoritesOnly) q = q.Where(w => w.IsFavorite);
         if (downloadedOnly) q = q.Where(w => w.IsDownloaded);
         q = q.Where(w => MatchMedia(w.WorkType, media));
+        if (workTypeFilter is { Count: > 0 })
+        {
+            var allow = new HashSet<string>(workTypeFilter, StringComparer.OrdinalIgnoreCase);
+            q = q.Where(w => allow.Contains(w.WorkType));
+        }
         if (!string.IsNullOrWhiteSpace(search))
         {
             var s = search.Trim();
@@ -235,7 +260,8 @@ public sealed class LibraryService
         }
         if (!string.IsNullOrWhiteSpace(tagFilter))
         {
-            q = q.Where(w => w.TagsJson.Contains(tagFilter, StringComparison.OrdinalIgnoreCase));
+            q = q.Where(w => ParseTags(w.TagsJson)
+                .Any(t => t.Contains(tagFilter, StringComparison.OrdinalIgnoreCase)));
         }
         return q.ToList();
     }

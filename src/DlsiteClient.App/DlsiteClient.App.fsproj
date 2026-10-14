@@ -16,6 +16,7 @@
     <Compile Include="Fmt.fs" />
     <Compile Include="Localization.fs" />
     <Compile Include="Services.fs" />
+    <Compile Include="ThumbCache.fs" />
     <Compile Include="OAuthLogin.fs" />
     <Compile Include="NestImportPrompt.fs" />
     <Compile Include="Views/LibraryView.fs" />
