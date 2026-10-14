@@ -80,3 +80,11 @@
 - Root cause of library freeze after login: sync thumbnail HTTP via `.GetResult()` while building hundreds of rows on the UI thread.
 - Rule: all network/disk/credential/sync IO goes through `UiAsync` (or existing background services). Views only bind state and post UI updates.
 - Library paging default **20** (options 50/100). Settings apply on change (no Confirm). Filters collapsed until expanded. Work-type labels from Nest API + locale fallback.
+
+## ADR-017: Nest library folder layout
+
+- **Status:** Accepted (2026-10-15)
+- Observed Nest `libraryDirectory` tree: `{makerName}/{workName}/` (empty maker dirs ignored).
+- Detect installs by matching purchase `MakerName` + `WorkName` (case-insensitive on Windows; strip invalid path chars). Also accept `{workno}/` from our older extracts.
+- New extracts write Nest layout `{maker}/{work}` so Nest and this client share one tree.
+- Stale `IsDownloaded` cleared when no matching folder remains.

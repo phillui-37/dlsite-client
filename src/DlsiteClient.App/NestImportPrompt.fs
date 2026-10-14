@@ -3,6 +3,7 @@ module DlsiteClient.App.NestImportPrompt
 open System.Runtime.InteropServices
 open DlsiteClient.App.Localization
 open DlsiteClient.App.Services
+open DlsiteClient.App.UiAsync
 open DlsiteClient.Platform
 
 [<DllImport("user32.dll", CharSet = CharSet.Unicode)>]
@@ -36,6 +37,10 @@ let maybeAsk (svc: AppServices) =
                     s.LibraryDirectory <- paths.LibraryDirectory
                     s.CacheDirectory <- paths.CacheDirectory
                     s.NestImportAsked <- true)
+                runPoolAsyncUnit
+                    (fun () -> svc.Library.ReconcileLocalInstallsAsync())
+                    (fun () -> ())
+                    (fun _ -> ())
             else
                 tryUpdate svc (fun s -> s.NestImportAsked <- true)
         else
