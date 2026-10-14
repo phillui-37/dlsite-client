@@ -22,3 +22,13 @@
 - Session secrets go in OS credential store only.
 - Download/extract must not crash the UI process.
 - **Never use F# `sprintf`/`printf`/`%A` under Native AOT** — use `DlsiteClient.App.Fmt` / `String.Format`.
+
+## Cursor Cloud specific instructions
+
+- .NET SDK 10 is on `PATH` as `dotnet`. The wrapper sets `DOTNET_ROOT` and `LD_LIBRARY_PATH`.
+- Dev build (managed, not Native AOT): `dotnet build src/DlsiteClient.App/DlsiteClient.App.fsproj -c Release`
+- Dev run needs `DISPLAY`. `dotnet run --project src/DlsiteClient.App -c Release`. UI locale defaults to `ja`.
+- TFM is `net10.0-windows`. `Services.fs` always constructs the Windows platform types. Linux/Proton is M5+ and is not wired. `/usr/local/lib/dlsite-winshim` supplies `CredRead` and `MessageBoxW` so the window can open. `CredRead` returns not-found. That shim is not a credential store.
+- Settings **OK** calls `WindowsStartupRegistration.SetEnabled`. On Linux, `Registry.CurrentUser` throws `NullReferenceException` and the process exits. `SettingsService.Update` writes sqlite before that call. Skip OK when the process must stay up.
+- Native AOT and MSI stay on Windows (`scripts/publish-aot.ps1`, `vcvars64`). Do not publish AOT on this VM.
+- `7z` is installed for archive checks.
