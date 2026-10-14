@@ -1,4 +1,3 @@
-using System.Net;
 using DlsiteClient.Core.Api;
 using DlsiteClient.Core.Services;
 using DlsiteClient.Core.Storage;
@@ -35,28 +34,7 @@ public static class ServiceCollectionExtensions
                 client.DefaultRequestHeaders.UserAgent.ParseAdd(DlsiteApiClient.UserAgent);
             })
             .ConfigurePrimaryHttpMessageHandler(sp =>
-            {
-                var settings = sp.GetRequiredService<SettingsService>().Current;
-                var handler = new HttpClientHandler
-                {
-                    AutomaticDecompression = DecompressionMethods.All
-                };
-                if (settings.ProxyMode == "system")
-                {
-                    handler.UseProxy = true;
-                    handler.Proxy = WebRequest.DefaultWebProxy;
-                }
-                else if (settings.ProxyMode == "custom" && !string.IsNullOrWhiteSpace(settings.ProxyUrl))
-                {
-                    handler.UseProxy = true;
-                    handler.Proxy = new WebProxy(settings.ProxyUrl);
-                }
-                else
-                {
-                    handler.UseProxy = false;
-                }
-                return handler;
-            });
+                new SettingsAwareProxyHandler(sp.GetRequiredService<SettingsService>()));
 
         return services;
     }

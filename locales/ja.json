@@ -67,6 +67,8 @@
   "downloads.corruptArchive": "アーカイブが破損しています。再ダウンロードしますか？",
   "downloads.extractFailed": "解凍に失敗しました",
   "downloads.openLibrary": "ライブラリを開く",
+  "downloads.moveUp": "上へ",
+  "downloads.moveDown": "下へ",
   "launcher.multiExe": "複数の実行ファイルが見つかりました。実行ファイルを選択してください",
   "launcher.alwaysUse": "今後このファイルを常に実行する",
   "launcher.launch": "ゲームを起動する",
