@@ -10,6 +10,6 @@
     <ProjectReference Include="..\DlsiteClient.Platform\DlsiteClient.Platform.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
   </ItemGroup>
 </Project>

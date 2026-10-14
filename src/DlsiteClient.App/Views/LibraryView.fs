@@ -76,20 +76,26 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                                 CheckBox.create [
                                     CheckBox.content (t "library.filter.favorites")
                                     CheckBox.isChecked favOnly.Current
-                                    CheckBox.onChecked (fun _ -> favOnly.Set true)
-                                    CheckBox.onUnchecked (fun _ -> favOnly.Set false)
+                                    CheckBox.onIsCheckedChanged (fun e ->
+                                        match e.Source with
+                                        | :? CheckBox as cb -> favOnly.Set (cb.IsChecked = Nullable true)
+                                        | _ -> ())
                                 ]
                                 CheckBox.create [
                                     CheckBox.content (t "library.filter.hidden")
                                     CheckBox.isChecked showHidden.Current
-                                    CheckBox.onChecked (fun _ -> showHidden.Set true)
-                                    CheckBox.onUnchecked (fun _ -> showHidden.Set false)
+                                    CheckBox.onIsCheckedChanged (fun e ->
+                                        match e.Source with
+                                        | :? CheckBox as cb -> showHidden.Set (cb.IsChecked = Nullable true)
+                                        | _ -> ())
                                 ]
                                 CheckBox.create [
                                     CheckBox.content (t "library.filter.downloaded")
                                     CheckBox.isChecked dlOnly.Current
-                                    CheckBox.onChecked (fun _ -> dlOnly.Set true)
-                                    CheckBox.onUnchecked (fun _ -> dlOnly.Set false)
+                                    CheckBox.onIsCheckedChanged (fun e ->
+                                        match e.Source with
+                                        | :? CheckBox as cb -> dlOnly.Set (cb.IsChecked = Nullable true)
+                                        | _ -> ())
                                 ]
                                 Button.create [
                                     Button.content (t "library.mode.list")
@@ -163,10 +169,13 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                                                     CheckBox.create [
                                                         DockPanel.dock Dock.Left
                                                         CheckBox.isChecked (selected.Current.Contains w.Workno)
-                                                        CheckBox.onChecked (fun _ ->
-                                                            selected.Set(selected.Current.Add w.Workno))
-                                                        CheckBox.onUnchecked (fun _ ->
-                                                            selected.Set(selected.Current.Remove w.Workno))
+                                                        CheckBox.onIsCheckedChanged (fun e ->
+                                                            match e.Source with
+                                                            | :? CheckBox as cb when cb.IsChecked = Nullable true ->
+                                                                selected.Set(selected.Current.Add w.Workno)
+                                                            | :? CheckBox ->
+                                                                selected.Set(selected.Current.Remove w.Workno)
+                                                            | _ -> ())
                                                     ]
                                                     if w.HasUpdate then
                                                         Button.create [

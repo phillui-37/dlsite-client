@@ -8,6 +8,8 @@ open Avalonia.FuncUI
 open Avalonia.FuncUI.DSL
 open Avalonia.FuncUI.Types
 open DlsiteClient.App.Localization
+open DlsiteClient.App.NestImportPrompt
+open DlsiteClient.App.OAuthLogin
 open DlsiteClient.App.Services
 open DlsiteClient.Platform
 
@@ -75,11 +77,6 @@ let view () =
                                 else
                                     t "auth.login")
                         ]
-                        TextBox.create [
-                            TextBox.watermark "__DLsite_SID"
-                            TextBox.text sidInput.Current
-                            TextBox.onTextChanged sidInput.Set
-                        ]
                         StackPanel.create [
                             StackPanel.orientation Orientation.Horizontal
                             StackPanel.spacing 8.0
@@ -87,26 +84,45 @@ let view () =
                                 Button.create [
                                     Button.content (t "auth.login")
                                     Button.onClick (fun _ ->
-                                        if not (String.IsNullOrWhiteSpace sidInput.Current) then
-                                            svc.Auth.ApplyLoginAsync(sidInput.Current.Trim(), null)
-                                                .GetAwaiter().GetResult()
-                                            status.Set "login ok")
+                                        status.Set (t "auth.loggingIn")
+                                        let r = loginAsync(svc).GetAwaiter().GetResult()
+                                        status.Set (
+                                            if r = "ok" then t "auth.loginOk"
+                                            elif r = "cancelled" then t "auth.cancelled"
+                                            else r))
                                 ]
                                 Button.create [
                                     Button.content (t "auth.logout")
                                     Button.onClick (fun _ ->
                                         svc.Auth.LogoutAsync().GetAwaiter().GetResult()
-                                        status.Set "logout")
+                                        status.Set (t "auth.logout"))
                                 ]
                                 Button.create [
-                                    Button.content "Sync"
+                                    Button.content (t "auth.sync")
                                     Button.onClick (fun _ ->
                                         try
                                             svc.Library.SyncPurchasesAsync().GetAwaiter().GetResult()
-                                            status.Set "synced"
+                                            status.Set (t "auth.synced")
                                         with ex -> status.Set ex.Message)
                                 ]
                             ]
+                        ]
+                        TextBlock.create [
+                            TextBlock.text (t "auth.sidFallback")
+                            TextBlock.opacity 0.7
+                        ]
+                        TextBox.create [
+                            TextBox.watermark "__DLsite_SID"
+                            TextBox.text sidInput.Current
+                            TextBox.onTextChanged sidInput.Set
+                        ]
+                        Button.create [
+                            Button.content (t "auth.sidLogin")
+                            Button.onClick (fun _ ->
+                                if not (String.IsNullOrWhiteSpace sidInput.Current) then
+                                    svc.Auth.ApplyLoginAsync(sidInput.Current.Trim(), null)
+                                        .GetAwaiter().GetResult()
+                                    status.Set (t "auth.loginOk"))
                         ]
 
                         TextBlock.create [
@@ -121,8 +137,10 @@ let view () =
                         CheckBox.create [
                             CheckBox.content (t "settings.startOnLogin")
                             CheckBox.isChecked startLogin.Current
-                            CheckBox.onChecked (fun _ -> startLogin.Set true)
-                            CheckBox.onUnchecked (fun _ -> startLogin.Set false)
+                            CheckBox.onIsCheckedChanged (fun e ->
+                                match e.Source with
+                                | :? CheckBox as cb -> startLogin.Set (cb.IsChecked = Nullable true)
+                                | _ -> ())
                         ]
 
                         TextBlock.create [ TextBlock.text (t "settings.language") ]
@@ -186,14 +204,13 @@ let view () =
                         Button.create [
                             Button.content (t "settings.nestImportTitle")
                             Button.onClick (fun _ ->
-                                let mutable paths: NestPathImport = Unchecked.defaultof<_>
-                                if svc.NestImport.TryReadPaths(&paths) && not (isNull (box paths)) then
-                                    lib.Set paths.LibraryDirectory
-                                    cache.Set paths.CacheDirectory
-                                    svc.Settings.Update(fun s -> s.NestImportAsked <- true)
-                                    status.Set (t "settings.nestImport")
-                                else
-                                    status.Set "Nest settings not found")
+                                // Reset flag so prompt runs again with confirmation
+                                svc.Settings.Update(fun s -> s.NestImportAsked <- false)
+                                maybeAsk svc
+                                let s = svc.Settings.Current
+                                lib.Set s.LibraryDirectory
+                                cache.Set s.CacheDirectory
+                                status.Set (t "settings.nestImportTitle"))
                         ]
 
                         Button.create [

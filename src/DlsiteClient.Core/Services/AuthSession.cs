@@ -46,6 +46,16 @@ public sealed class AuthSession
         Changed?.Invoke();
     }
 
+    /// <summary>OIDC id_token exchange (Nest LoginWindow flow).</summary>
+    public async Task LoginWithOidcAsync(
+        string idToken, string state, string sessionState, CancellationToken ct = default)
+    {
+        var data = await _api.LoginWithIdTokenAsync(idToken, state, sessionState, ct).ConfigureAwait(false);
+        if (string.IsNullOrEmpty(data?.SessionId))
+            throw new InvalidOperationException("Nest login returned no session_id");
+        await ApplyLoginAsync(data.SessionId, data.LoginId, ct).ConfigureAwait(false);
+    }
+
     public async Task LogoutAsync(CancellationToken ct = default)
     {
         await _api.LogoutAsync(ct).ConfigureAwait(false);

@@ -4,6 +4,7 @@
 
 - **Status:** Accepted
 - **Why:** Cross-platform UI; Nest affinity in C#; FuncUI avoids XAML AOT pain; competitive with Tauri on RAM for dense lists
+- **Versions (2026-10-15):** Avalonia **12.1.4** + FuncUI **2.0.0** + WebView **12.1.1** (MIT) + Material.Avalonia **3.21.0**; Microsoft.Extensions / Sqlite **10.0.13**
 - **AOT smoke (2026-10-15):** **PASS** after VS 2026 C++ Desktop tools. Publish with `vcvars64.bat` then `-p:PublishAot=true -r win-x64`. Output: `artifacts/aot-win-x64/`.
 - **Note:** Still has IL2026/IL3050 JSON trim warnings (source-gen cleanup later). Dev builds can stay non-AOT; release prefers AOT when linker present.
 - **Fallback:** If linker missing → trimmed self-contained (`PublishAot=false`).
@@ -49,3 +50,17 @@
 
 - Windows: AOT folder + **MSI** (WiX) wizard — `scripts/publish-msi.ps1`
 - Linux: **AppImage** in M5+ backlog
+
+## ADR-013: OAuth = Avalonia WebAuthenticationBroker (MIT WebView)
+
+- **Status:** Accepted (M1), corrected 2026-10-15
+- Match Nest: `client_id=dlsite.user`, fragment redirect `https://www.dlsite.com/home/login`
+- **License:** `Avalonia.Controls.WebView` **≥ 11.4.0 / 12.0.0** is FOSS (MIT). **11.3.x is legacy Accelerate-only** — do not use.
+- Package pin: `Avalonia.Controls.WebView` **12.1.1** (aligned with Avalonia 12.1.x).
+- API: `WebAuthenticationBroker.AuthenticateAsync` — WebView2 on Windows.
+- Manual SID login kept as debug fallback only.
+
+## ADR-014: UI theme = Material.Avalonia
+
+- **Status:** Accepted
+- Package: `Material.Avalonia` 3.21.0 — Light / Primary Blue / Secondary Teal (not Fluent)

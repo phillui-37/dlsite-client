@@ -4,8 +4,9 @@
 
 1. **Markdown in this repo wins over chat.** Read and update docs before coding.
 2. Primary docs: `docs/REQUIREMENTS.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/API.md`, `docs/MILESTONES.md`.
-3. API contract: `openapi.yaml` + `API-EXTRACTION-GUIDE.md`.
+3. API contract notes: `docs/API.md` (Nest HTTP surface; no OpenAPI artifact in-repo).
 4. UI strings: `locales/*.json` only. Never hardcode user-facing copy in F#/C# (debug logs OK).
+
 5. When intent changes, update the relevant MD **first**, then code.
 
 ## Stack (locked)

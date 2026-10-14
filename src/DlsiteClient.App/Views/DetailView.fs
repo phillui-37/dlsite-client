@@ -97,8 +97,11 @@ let view (workno: string) (onBack: unit -> unit) =
                                     CheckBox.create [
                                         CheckBox.content (t "detail.japanLocale")
                                         CheckBox.isChecked w.UseJapanLocale
-                                        CheckBox.onChecked (fun _ -> svc.Library.SetJapanLocale(w.Workno, true))
-                                        CheckBox.onUnchecked (fun _ -> svc.Library.SetJapanLocale(w.Workno, false))
+                                        CheckBox.onIsCheckedChanged (fun e ->
+                                            match e.Source with
+                                            | :? CheckBox as cb ->
+                                                svc.Library.SetJapanLocale(w.Workno, cb.IsChecked = Nullable true)
+                                            | _ -> ())
                                     ]
                                     StackPanel.create [
                                         StackPanel.orientation Orientation.Horizontal
@@ -164,8 +167,10 @@ let view (workno: string) (onBack: unit -> unit) =
                                                 CheckBox.create [
                                                     CheckBox.content (t "launcher.alwaysUse")
                                                     CheckBox.isChecked always.Current
-                                                    CheckBox.onChecked (fun _ -> always.Set true)
-                                                    CheckBox.onUnchecked (fun _ -> always.Set false)
+                                                    CheckBox.onIsCheckedChanged (fun e ->
+                                                        match e.Source with
+                                                        | :? CheckBox as cb -> always.Set (cb.IsChecked = Nullable true)
+                                                        | _ -> ())
                                                 ]
                                                 StackPanel.create [
                                                     StackPanel.orientation Orientation.Horizontal

@@ -14,7 +14,7 @@
 
 ```
 UI (FuncUI) → Core services → Platform traits
-Auth → login.dlsite.com OIDC → POST nest/login → CredentialStore
+Auth → Avalonia WebAuthenticationBroker OIDC (`dlsite.user` / fragment `/home/login`) → POST nest/login → CredentialStore
 Library ← GET purchases (+ detail / product.json enrich)
 Queue → Range download → cache → 7z extract → library folder
 ```
