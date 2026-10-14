@@ -86,7 +86,102 @@ public sealed class LibraryService
         _db.UpsertWorks(mapped);
         await EnsureWorkTypeNamesAsync(ct).ConfigureAwait(false);
         await EnrichSampleMetadataAsync(mapped.Take(5).ToList(), ct).ConfigureAwait(false);
+        await ReconcileLocalInstallsAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Match Nest layout {maker}/{workName} and legacy {workno} under LibraryDirectory.
+    /// </summary>
+    public async Task ReconcileLocalInstallsAsync(CancellationToken ct = default)
+    {
+        var libRoot = _settings.Current.LibraryDirectory;
+        if (string.IsNullOrWhiteSpace(libRoot) || !Directory.Exists(libRoot))
+        {
+            Reload();
+            return;
+        }
+
+        var works = _db.GetAllWorks().ToList();
+        var changed = 0;
+        await Task.Run(() =>
+        {
+            foreach (var w in works)
+            {
+                ct.ThrowIfCancellationRequested();
+                var found = ResolveInstallPath(libRoot, w);
+                if (found is not null)
+                {
+                    if (!w.IsDownloaded
+                        || !string.Equals(w.InstallPath, found, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _db.SetDownloaded(w.Workno, true, found, w.LocalUpdateDate ?? w.UpdateDate);
+                        changed++;
+                    }
+                }
+                else if (w.IsDownloaded)
+                {
+                    _db.SetDownloaded(w.Workno, false, null, null);
+                    changed++;
+                }
+            }
+        }, ct).ConfigureAwait(false);
+
+        if (changed > 0)
+            _logger.LogInformation("Reconciled {Count} local install flags under {Root}", changed, libRoot);
         Reload();
+    }
+
+    public static string? ResolveInstallPath(string libRoot, WorkItem w)
+    {
+        if (!string.IsNullOrWhiteSpace(w.InstallPath) && Directory.Exists(w.InstallPath))
+            return w.InstallPath;
+
+        var byWorkno = Path.Combine(libRoot, w.Workno);
+        if (Directory.Exists(byWorkno))
+            return byWorkno;
+
+        var maker = SanitizePathSegment(w.MakerName);
+        var title = SanitizePathSegment(w.WorkName);
+        if (maker.Length == 0 || title.Length == 0)
+            return null;
+
+        var nestPath = Path.Combine(libRoot, maker, title);
+        if (Directory.Exists(nestPath))
+            return nestPath;
+
+        // Case-insensitive walk when exact combine misses (rare path normalization).
+        try
+        {
+            foreach (var makerDir in Directory.EnumerateDirectories(libRoot))
+            {
+                if (!string.Equals(Path.GetFileName(makerDir), maker, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                foreach (var workDir in Directory.EnumerateDirectories(makerDir))
+                {
+                    if (string.Equals(Path.GetFileName(workDir), title, StringComparison.OrdinalIgnoreCase))
+                        return workDir;
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // IO errors → treat as not found
+        }
+
+        return null;
+    }
+
+    public static string SanitizePathSegment(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "";
+        var invalid = Path.GetInvalidFileNameChars();
+        var chars = name.Trim().ToCharArray();
+        for (var i = 0; i < chars.Length; i++)
+        {
+            if (Array.IndexOf(invalid, chars[i]) >= 0)
+                chars[i] = '_';
+        }
+        return new string(chars).TrimEnd('.', ' ');
     }
 
     public async Task EnsureWorkTypeNamesAsync(CancellationToken ct = default)

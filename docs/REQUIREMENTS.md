@@ -16,6 +16,7 @@ Nest replacement. Windows first; UI must stay cross-platform capable.
 - Double-click → detail page
 - Search: fuzzy title + maker only
 - Metadata + thumbnails load **off the UI thread**; placeholders/skeletons until ready; thumbs fill in as fetches complete
+- **Local install detect:** reconcile library folder against purchases. Nest layout is `{makerName}/{workName}`; also accept our `{workno}` folder. Run after purchase sync and on library view boot (off UI thread). Downloaded column header must fit full i18n label (no clip).
 
 ## Tags
 
