@@ -4,6 +4,8 @@ Cross-platform Nest replacement: **Avalonia.FuncUI (F#)** UI + **.NET 10** Core.
 
 Docs in [`docs/`](docs/) are the source of truth ([`AGENTS.md`](AGENTS.md)). Milestones **M0–M6** are complete ([`docs/MILESTONES.md`](docs/MILESTONES.md)).
 
+**License:** [MIT](LICENSE) · **Contributing:** [issues only — PRs are not accepted](CONTRIBUTING.md)
+
 ## Features
 
 - **Auth** — Nest OIDC via Avalonia WebAuthenticationBroker; SID in OS credential store; session expiry clears creds, pauses downloads, prompts re-login
@@ -76,3 +78,13 @@ Settings → Nest import reads **only** `libraryDirectory` / `cacheDirectory` fr
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | ADRs |
 | [`docs/MILESTONES.md`](docs/MILESTONES.md) | Milestone status |
 | [`docs/PACKAGING.md`](docs/PACKAGING.md) | Windows MSI / Linux AppImage |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to report issues (no external PRs) |
+| [`LICENSE`](LICENSE) | MIT |
+
+## License
+
+[MIT](LICENSE) © 2026 Phil Lui
+
+## Contributing
+
+Pull requests are **not** accepted. Please open a GitHub Issue instead — see [`CONTRIBUTING.md`](CONTRIBUTING.md).
