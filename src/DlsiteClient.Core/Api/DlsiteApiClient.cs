@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
-using DlsiteClient.Core.Models;
+using DlsiteClient.Core.Serialization;
 using Microsoft.Extensions.Logging;
 
 namespace DlsiteClient.Core.Api;
@@ -12,11 +12,6 @@ public sealed class DlsiteApiClient
     public const string UserAgentWorkTypes = "DLSiteNest/2.0.28";
     public const string ApiBase = "https://www.dlsite.com";
     public const string LoginBase = "https://login.dlsite.com";
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true
-    };
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<DlsiteApiClient> _logger;
@@ -58,7 +53,7 @@ public sealed class DlsiteApiClient
         using var res = await SendAsync(req, ct).ConfigureAwait(false);
         res.EnsureSuccessStatusCode();
         await using var stream = await res.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        var dto = await JsonSerializer.DeserializeAsync<LoginResponseDto>(stream, JsonOptions, ct)
+        var dto = await JsonSerializer.DeserializeAsync(stream, AppJsonContext.Default.LoginResponseDto, ct)
             .ConfigureAwait(false);
         if (dto?.Meta?.Code is not (0 or 200) && dto?.Data?.SessionId is null)
             _logger.LogWarning("Login meta code unexpected: {Code}", dto?.Meta?.Code);
@@ -110,7 +105,7 @@ public sealed class DlsiteApiClient
         using var res = await SendAsync(req, ct).ConfigureAwait(false);
         res.EnsureSuccessStatusCode();
         await using var stream = await res.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        var dto = await JsonSerializer.DeserializeAsync<PurchaseListResponseDto>(stream, JsonOptions, ct)
+        var dto = await JsonSerializer.DeserializeAsync(stream, AppJsonContext.Default.PurchaseListResponseDto, ct)
             .ConfigureAwait(false);
         return dto?.Data?.Purchases ?? [];
     }
@@ -127,7 +122,7 @@ public sealed class DlsiteApiClient
         using var res = await SendAsync(req, ct).ConfigureAwait(false);
         res.EnsureSuccessStatusCode();
         await using var stream = await res.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        var dto = await JsonSerializer.DeserializeAsync<ProductDetailEnvelopeDto>(stream, JsonOptions, ct)
+        var dto = await JsonSerializer.DeserializeAsync(stream, AppJsonContext.Default.ProductDetailEnvelopeDto, ct)
             .ConfigureAwait(false);
         return dto?.Data?.FirstOrDefault();
     }
@@ -140,7 +135,7 @@ public sealed class DlsiteApiClient
         using var res = await SendAsync(req, ct).ConfigureAwait(false);
         res.EnsureSuccessStatusCode();
         await using var stream = await res.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        var dto = await JsonSerializer.DeserializeAsync<WorkTypeResponseDto>(stream, JsonOptions, ct)
+        var dto = await JsonSerializer.DeserializeAsync(stream, AppJsonContext.Default.WorkTypeResponseDto, ct)
             .ConfigureAwait(false);
         return dto?.Data?.AllWorkTypes ?? [];
     }
