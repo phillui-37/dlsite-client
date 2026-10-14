@@ -58,6 +58,7 @@
 - **License:** `Avalonia.Controls.WebView` **≥ 11.4.0 / 12.0.0** is FOSS (MIT). **11.3.x is legacy Accelerate-only** — do not use.
 - Package pin: `Avalonia.Controls.WebView` **12.1.1** (aligned with Avalonia 12.1.x).
 - API: `WebAuthenticationBroker.AuthenticateAsync` — WebView2 on Windows.
+- **UI thread:** call `AuthenticateAsync` without blocking (no `.GetResult()` / `.Wait()` on the UI thread). Blocking opens an empty login window and freezes the app — the broker needs the dispatcher to paint and navigate.
 - Manual SID login kept as debug fallback only.
 
 ## ADR-014: UI theme = Material.Avalonia

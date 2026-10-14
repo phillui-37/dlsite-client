@@ -1,9 +1,11 @@
 module DlsiteClient.App.Views.SettingsView
 
 open System
+open System.Threading.Tasks
 open Avalonia.Controls
 open Avalonia.Layout
 open Avalonia.Media
+open Avalonia.Threading
 open Avalonia.FuncUI
 open Avalonia.FuncUI.DSL
 open Avalonia.FuncUI.Types
@@ -83,13 +85,19 @@ let view () =
                             StackPanel.children [
                                 Button.create [
                                     Button.content (t "auth.login")
+                                    // Never GetResult() here: WebAuthenticationBroker needs the UI
+                                    // thread to paint/navigate; blocking freezes an empty login window.
                                     Button.onClick (fun _ ->
                                         status.Set (t "auth.loggingIn")
-                                        let r = loginAsync(svc).GetAwaiter().GetResult()
-                                        status.Set (
-                                            if r = "ok" then t "auth.loginOk"
-                                            elif r = "cancelled" then t "auth.cancelled"
-                                            else r))
+                                        ignore (
+                                            task {
+                                                let! r = loginAsync svc
+                                                Dispatcher.UIThread.Post(fun () ->
+                                                    status.Set (
+                                                        if r = "ok" then t "auth.loginOk"
+                                                        elif r = "cancelled" then t "auth.cancelled"
+                                                        else r))
+                                            }))
                                 ]
                                 Button.create [
                                     Button.content (t "auth.logout")
