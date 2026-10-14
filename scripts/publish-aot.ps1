@@ -22,7 +22,7 @@ if (-not $vcvars) {
 
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 $proj = Join-Path $Root "src\DlsiteClient.App\DlsiteClient.App.fsproj"
-$cmd = "`"$vcvars`" && `"$Dotnet`" publish `"$proj`" -c Release -r win-x64 -p:PublishAot=true --self-contained true -o `"$Out`""
+$cmd = "`"$vcvars`" && `"$Dotnet`" publish `"$proj`" -c Release -f net10.0-windows -r win-x64 -p:PublishAot=true --self-contained true -o `"$Out`""
 Write-Host "Running: $cmd"
 cmd /c $cmd
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
