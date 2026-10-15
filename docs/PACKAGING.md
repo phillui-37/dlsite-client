@@ -5,7 +5,7 @@
 | Artifact | Script | Notes |
 |----------|--------|-------|
 | Native AOT folder | [`scripts/publish-aot.ps1`](../scripts/publish-aot.ps1) | Needs VS C++ / `vcvars64` |
-| MSI wizard | [`scripts/publish-msi.ps1`](../scripts/publish-msi.ps1) | WiX 7 x64. Per-user (no UAC) or all users (UAC). Start Menu + Desktop shortcuts |
+| MSI wizard | [`scripts/publish-msi.ps1`](../scripts/publish-msi.ps1) | WiX 7 x64. Per-user (no UAC) or all users (UAC). Script passes `-acceptEula wix7` (OSMF). Start Menu + Desktop shortcuts |
 | Dev build | [`scripts/build.ps1`](../scripts/build.ps1) | `dotnet build -c Release -f net10.0-windows` |
 
 MSI source: [`packaging/windows/Product.wxs`](../packaging/windows/Product.wxs).
