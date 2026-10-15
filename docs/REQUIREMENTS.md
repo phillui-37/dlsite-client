@@ -34,6 +34,7 @@ Nest replacement. Windows first; UI must stay cross-platform capable.
 - zip / rar / 7z + split archives via external 7z
 - Concurrent download/extract caps; extract default concurrency 1
 - DL fail → resume; extract fail → integrity test (`7z t`); corrupt → re-download; OK → retry extract
+- Clear on the completed list removes completed, failed, and corrupt rows, and deletes that work's `{cache}/{workno}` folder only
 - Rate limit + HTTP(S) proxy in settings
 - UI must not crash on large queues / big extracts
 

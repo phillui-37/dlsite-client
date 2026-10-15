@@ -33,6 +33,7 @@ let private jobRow
         DockPanel.children [
             StackPanel.create [
                 DockPanel.dock Dock.Right
+                StackPanel.zIndex 1
                 StackPanel.orientation Orientation.Horizontal
                 StackPanel.spacing 4.0
                 StackPanel.children [
@@ -86,6 +87,7 @@ let private jobRow
                 ]
             ]
             StackPanel.create [
+                StackPanel.clipToBounds true
                 StackPanel.children [
                     TextBlock.create [ TextBlock.text j.WorkName; TextBlock.fontSize 16.0 ]
                     ProgressBar.create [
@@ -95,6 +97,7 @@ let private jobRow
                         ProgressBar.height 6.0
                     ]
                     TextBlock.create [
+                        TextBlock.textTrimming TextTrimming.CharacterEllipsis
                         TextBlock.text (
                             let statusLabel =
                                 match j.State with

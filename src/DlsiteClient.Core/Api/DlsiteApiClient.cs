@@ -125,10 +125,40 @@ public sealed class DlsiteApiClient
         EnsureAuthedStatus(res);
         res.EnsureSuccessStatusCode();
         await using var stream = await res.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        var dto = await JsonSerializer.DeserializeAsync(stream, AppJsonContext.Default.ProductDetailEnvelopeDto, ct)
-            .ConfigureAwait(false);
-        ThrowIfAuthMeta(dto?.Meta);
-        return dto?.Data?.FirstOrDefault();
+        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
+        var detail = ReadProductDetail(doc.RootElement);
+        NormalizeContentsUrls(detail);
+        return detail;
+    }
+
+    /// <summary>
+    /// Nest now returns a product array. Older builds returned <c>{ meta, data }</c>.
+    /// </summary>
+    private static ProductDetailDto? ReadProductDetail(JsonElement root)
+    {
+        switch (root.ValueKind)
+        {
+            case JsonValueKind.Array:
+                return root.Deserialize(AppJsonContext.Default.ListProductDetailDto)?.FirstOrDefault();
+            case JsonValueKind.Object:
+            {
+                var dto = root.Deserialize(AppJsonContext.Default.ProductDetailEnvelopeDto);
+                ThrowIfAuthMeta(dto?.Meta);
+                return dto?.Data?.FirstOrDefault();
+            }
+            default:
+                throw new JsonException("product detail root is not an object or array");
+        }
+    }
+
+    private static void NormalizeContentsUrls(ProductDetailDto? detail)
+    {
+        if (detail?.ContentsWithUrl is null) return;
+        foreach (var file in detail.ContentsWithUrl)
+        {
+            if (file.Url is not null && file.Url.StartsWith("//", StringComparison.Ordinal))
+                file.Url = "https:" + file.Url;
+        }
     }
 
     public async Task<IReadOnlyList<WorkTypeDto>> GetWorkTypesAsync(string locale, CancellationToken ct = default)

@@ -12,5 +12,6 @@ namespace DlsiteClient.Core.Serialization;
 [JsonSerializable(typeof(LoginResponseDto))]
 [JsonSerializable(typeof(PurchaseListResponseDto))]
 [JsonSerializable(typeof(ProductDetailEnvelopeDto))]
+[JsonSerializable(typeof(List<ProductDetailDto>))]
 [JsonSerializable(typeof(WorkTypeResponseDto))]
 public partial class AppJsonContext : JsonSerializerContext;

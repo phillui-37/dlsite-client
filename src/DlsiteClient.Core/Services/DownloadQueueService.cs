@@ -201,12 +201,48 @@ public sealed class DownloadQueueService : IAsyncDisposable
 
     public void ClearCompleted()
     {
+        List<string> removed;
         lock (_gate)
         {
-            _jobs.RemoveAll(j => j.State is DownloadJobState.Completed);
+            removed = _jobs
+                .Where(j => j.State is DownloadJobState.Completed
+                    or DownloadJobState.Failed
+                    or DownloadJobState.CorruptArchive)
+                .Select(j => j.Workno)
+                .ToList();
+            if (removed.Count == 0) return;
+            _jobs.RemoveAll(j => removed.Contains(j.Workno));
             Persist(force: true);
         }
+        foreach (var workno in removed)
+        {
+            _extractOnly.TryRemove(workno, out _);
+            if (_cts.TryRemove(workno, out var cts))
+            {
+                try { cts.Cancel(); } catch { /* already done */ }
+                cts.Dispose();
+            }
+            TryDeleteWorkCache(workno);
+        }
         Notify();
+    }
+
+    private void TryDeleteWorkCache(string workno)
+    {
+        if (string.IsNullOrWhiteSpace(workno)) return;
+        var root = Path.GetFullPath(_settings.Current.CacheDirectory);
+        var cacheDir = Path.GetFullPath(Path.Combine(root, workno));
+        var prefix = root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!cacheDir.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return;
+        try
+        {
+            if (Directory.Exists(cacheDir)) Directory.Delete(cacheDir, true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to wipe cache for {Workno}", workno);
+        }
     }
 
     public void RequestRedownload(string workno)

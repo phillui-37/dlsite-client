@@ -39,7 +39,8 @@ Client: Avalonia `WebAuthenticationBroker` (`Avalonia.Controls.WebView` 12.1.x M
 ## Detail / download URLs
 
 - `GET /home/api/native-app/nest/product/detail?workno&locale&is_ana&fields`
-- `contents_with_url[].url` for binary download (cookies required)
+- Live body is a **JSON array** of product objects (no `meta` / `data` wrapper). The client still accepts the old `{ meta, data: Product[] }` envelope.
+- `contents_with_url[].url` is protocol-relative (`//www.dlsite.com/...`). Prefix `https:` before the GET. Cookies required.
 - Summary: `/{siteId}/user/product/summary/=/products/{workId}` → `down_url`
 
 ## Work types / updates
