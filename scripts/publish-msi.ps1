@@ -25,8 +25,8 @@ if (-not $wix) {
 New-Item -ItemType Directory -Force -Path $MsiOut | Out-Null
 $msi = Join-Path $MsiOut "DlsiteClient-0.1.0-win-x64.msi"
 
-# WiX v4/v5: bindpath.app points at AOT folder
-& wix build $Wxs -b "app=$AotDir" -o $msi
+# WiX v7: bindpath.app points at AOT folder. -acceptEula wix7 is the OSMF EULA id.
+& wix build $Wxs -b "app=$AotDir" -acceptEula wix7 -o $msi
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host "OK: $msi"
 Write-Host "Install: msiexec /i `"$msi`""
