@@ -52,7 +52,7 @@
 
 ## ADR-012: Packaging
 
-- Windows: AOT folder + **MSI** (WiX) wizard — `scripts/publish-msi.ps1`
+- Windows: AOT folder + **MSI** (WiX, per-user or all users; UAC only for all users) wizard — `scripts/publish-msi.ps1`
 - Linux: **AppImage** (M5) — `scripts/publish-appimage.sh`; see `docs/PACKAGING.md`
 
 ## ADR-013: OAuth = Avalonia WebAuthenticationBroker (MIT WebView)
