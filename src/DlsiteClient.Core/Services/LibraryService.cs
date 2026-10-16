@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
 using DlsiteClient.Core.Api;
@@ -21,6 +22,7 @@ public sealed class LibraryService
     private bool _tagsFromProductJson;
     private readonly SemaphoreSlim _tagGate = new(4, 4);
     private readonly HashSet<string> _tagAttempts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, (string? Json, HashSet<string> Tags)> _parsedTags = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _cacheGate = new();
 
     public LibraryService(
@@ -44,7 +46,11 @@ public sealed class LibraryService
 
     public void Reload()
     {
-        lock (_cacheGate) _cache = _db.GetAllWorks().ToList();
+        lock (_cacheGate)
+        {
+            _cache = _db.GetAllWorks().ToList();
+            _parsedTags.Clear();
+        }
         Changed?.Invoke();
     }
 
@@ -433,12 +439,22 @@ public sealed class LibraryService
             .OrderBy(t => t, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+    private HashSet<string> CachedTags(WorkItem work)
+    {
+        var json = work.TagsJson;
+        if (_parsedTags.TryGetValue(work.Workno, out var cached) && cached.Json == json)
+            return cached.Tags;
+        var tags = new HashSet<string>(ParseTags(json), StringComparer.OrdinalIgnoreCase);
+        _parsedTags[work.Workno] = (json, tags);
+        return tags;
+    }
+
     public IReadOnlyList<string> DistinctTags()
     {
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var w in _cache)
         {
-            foreach (var tag in ParseTags(w.TagsJson))
+            foreach (var tag in CachedTags(w))
                 if (!string.IsNullOrWhiteSpace(tag))
                     set.Add(tag);
         }
@@ -555,15 +571,14 @@ public sealed class LibraryService
         }
         if (!string.IsNullOrWhiteSpace(tagFilter))
         {
-            q = q.Where(w => ParseTags(w.TagsJson)
-                .Any(t => string.Equals(t, tagFilter, StringComparison.OrdinalIgnoreCase)));
+            q = q.Where(w => CachedTags(w).Contains(tagFilter));
         }
         if (tagFilters is { Count: > 0 })
         {
             var selected = new HashSet<string>(tagFilters, StringComparer.OrdinalIgnoreCase);
             q = q.Where(w =>
             {
-                var tags = new HashSet<string>(ParseTags(w.TagsJson), StringComparer.OrdinalIgnoreCase);
+                var tags = CachedTags(w);
                 return matchAllTags ? selected.IsSubsetOf(tags) : selected.Overlaps(tags);
             });
         }

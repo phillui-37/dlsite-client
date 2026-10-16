@@ -1,4 +1,8 @@
 {
+  "library.tags.summary": "{0} / {1} 件のタグを表示 · {2} 件選択中",
+  "library.tags.noResults": "一致するタグがありません。検索語を変更してください。",
+  "library.tags.showMore": "さらに60件を表示",
+
   "library.tags.search": "タグを検索",
   "library.tags.hint": "複数のタグを選択して絞り込めます。取得済みのタグは読み込み中も選択できます。",
   "library.tags.matchAll": "すべてに一致",

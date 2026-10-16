@@ -63,3 +63,5 @@ LauncherService owns Preparing / Starting / Running / Failed state and emits Cha
 ## Local CI runners
 
 GitHub Actions uses a Windows runner on the build PC and a Linux runner inside its VMware SteamOS VM. AppImage packaging uses an Ubuntu 24.04 chroot in that VM. The Windows job starts the prepared VM and its runner through the existing serial command agent. Each runner uses a separate checkout. Tag releases run only after both jobs pass.
+
+Tag queries reuse an in-memory per-work parsed set keyed by the current tags JSON. The library view coalesces service notifications on a 100 ms dispatcher timer and limits tag-choice controls to batches of 60; searching still covers all cached tags.

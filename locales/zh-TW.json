@@ -1,4 +1,8 @@
 {
+  "library.tags.summary": "顯示 {0} / {1} 個標籤 · 已選 {2} 個",
+  "library.tags.noResults": "找不到符合的標籤，請更換搜尋關鍵字。",
+  "library.tags.showMore": "再顯示60個",
+
   "library.tags.search": "搜尋標籤",
   "library.tags.hint": "可選擇多個標籤。載入期間仍可使用已取得的標籤。",
   "library.tags.matchAll": "符合所有標籤",
