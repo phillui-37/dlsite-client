@@ -51,3 +51,9 @@ Added update-available filtering, complete-tag filtering with background metadat
 Added a circular launch indicator, executable process monitoring, a three-minute start timeout, running-state display and duplicate-start prevention through a shared executable-path file lease. The lease works across application instances. Different executable names started by bootstrap launchers cannot be inferred reliably.
 
 Validation: 48 Windows core checks and 33 headless UI checks pass. Public product JSON and HTML were checked against a live work. Both app targets build. These changes have not been tested with a live commercial game or repackaged into MSI/AppImage.
+
+### Local CI and release builds — 2026-10-17
+
+GitHub Actions now runs on the Windows PC and its local SteamOS VM (Ubuntu 24.04 build userspace). Run 38945000421 passed 48 Windows core checks, 60 Linux core checks, 33 headless UI checks per platform, Native AOT MSI publishing and MSI maintenance checks, AppImage packaging and bundled-runtime checks. CI exposed and fixed an early-exit Linux credential-helper pipe race; its forced large-input regression also passed three local runs. The VM command agent now uses a persistent service, and a full power-off/start check passed. Windows runner startup uses the current account's Startup folder.
+
+The fresh AppImage desktop check found a first-run empty-path defect when XDG directories did not exist. App-data and launch-lease paths now resolve without requiring existing directories. All 62 Linux checks pass. The fixed FUSE package shows library/settings and the native vivion ID login form at 1280 x 800 with a fresh user config root. No new credentials were entered.

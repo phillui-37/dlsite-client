@@ -138,4 +138,16 @@ Use the work's store section for public product.json. Parse genres first, then o
 
 Use LauncherService state events for the circular start indicator. Match the selected executable by process name and path, including Wine argv paths. A file lease keyed by executable path prevents another app instance from starting the same target. Retain the lease until process exit or the three-minute detection timeout. Process monitoring uses IGameProcesses for deterministic tests. This does not infer a different executable spawned by a bootstrap launcher, and process detection does not imply window readiness.
 
+## ADR-024: Linux credential-helper early exit
+
 Linux CI exposed an early-exit credential-helper race: writing to closed stdin raised IOException before the helper exit code was handled. Normalize that failure to secret-service-unavailable and terminate the helper. The regression sends a large dummy value to force the closed-pipe path.
+
+## ADR-025: Local CI runtime
+
+The local CI uses the current stable Node 24 actions: checkout 7.0.1, upload-artifact 7.0.2 and download-artifact 8.0.2. Runner 2.338.0 meets their runtime requirements. Upload MSI/AppImage without ZIP compression because these files already contain compressed payloads.
+
+## ADR-026: Linux first-run app-data paths
+
+AppImage first-run testing exposed Environment.GetFolderPath(ApplicationData) returning an empty string when XDG_CONFIG_HOME does not exist. Request SpecialFolderOption.DoNotVerify so path resolution precedes directory creation. Test an absent XDG config directory; do not change process working-directory rules for WebKit.
+
+Apply DoNotVerify to LocalApplicationData for LauncherService's shared lease path too. Linux protocol registration may create XDG_DATA_HOME after that service is constructed; it cannot repair an already captured relative path.

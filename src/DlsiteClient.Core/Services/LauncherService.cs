@@ -21,7 +21,7 @@ public sealed class LauncherService
     public TimeSpan StartTimeout { get; init; } = TimeSpan.FromMinutes(3);
     public TimeSpan PollInterval { get; init; } = TimeSpan.FromMilliseconds(500);
     public string LaunchLockDirectory { get; init; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "dlsite-client", "launch-locks");
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify), "dlsite-client", "launch-locks");
     public GameLaunchState GetLaunchState(string workno) => _states.GetValueOrDefault(workno);
     public string GetLaunchError(string workno) => _errors.GetValueOrDefault(workno) ?? "launcher.startFailed";
     public bool TryBeginPreparation(string workno)

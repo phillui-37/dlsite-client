@@ -10,7 +10,7 @@ public sealed class LinuxPathConfig : IPathConfig
 {
     public string AppDataRoot { get; } =
         Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.DoNotVerify),
             "dlsite-client");
 
     public string DefaultLibraryDirectory => Path.Combine(AppDataRoot, "Library");

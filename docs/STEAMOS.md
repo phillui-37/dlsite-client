@@ -2,7 +2,7 @@
 
 ## Result
 
-Windows regression checks pass (29). The VMware guest running Valve SteamOS 3.8.14 recovery passes 41 checks. Native WebKit login-page rendering and real Proton/Wine executable launches work. The actual AppImage passes account login, 683-purchase sync, Secret Service storage, session restore, logout and re-login. This recovery VM does not certify a physical Steam Deck or Gaming Mode.
+Current checks pass: 48 Windows core checks, 62 Linux core checks, and 33 headless UI checks on each platform. GitHub CI runs on this PC and its VMware SteamOS VM; Linux builds use Ubuntu 24.04 userspace. Native WebKit login-page rendering and real Proton/Wine executable launches were checked in the recovery desktop. The earlier runtime AppImage passed account login, 683-purchase sync, Secret Service storage, session restore, logout and re-login. This recovery VM does not certify a physical Steam Deck or Gaming Mode.
 
 ## Fixed
 
@@ -55,7 +55,7 @@ dotnet run --project tests/DlsiteClient.RegressionTests -c Release
 
 For a guest without the SDK, publish the test project for `linux-x64` as self-contained, make the launcher executable, and run it with 7-Zip on PATH. Build the AppImage on Ubuntu 24.04 with the dependencies listed in [packaging](PACKAGING.md#linux-runtime-build).
 
-## Final artifact
+## Earlier runtime validation artifact
 
 - Path: `artifacts/appimage/DlsiteClient-linux-x64.AppImage`.
 - Size: 163858936 bytes.
@@ -70,3 +70,9 @@ The app now excludes Nest import at compile time from its Linux target. Both Rel
 ## Later source changes: metadata and game-start status
 
 Added update/tag filtering, public genre fallback, detail folder opening and launch state with a circular indicator. The new monitor has a Wine argv branch, but that branch has not been tested in the SteamOS VM. Windows validation passes 48 core checks and 33 headless UI checks; a real subprocess verifies cross-instance lease exclusion. The live public API and compiled HTML parser returned eight matching genre names. Both application targets build. The packaged AppImage above predates these changes.
+
+## 0.1.2 first-run package check
+
+A fresh FUSE-mounted AppImage starts at 1280 x 800, creates its absent XDG config directory outside the read-only mount, and shows library and settings. Its private WebKit renders the vivion ID login form. This check entered no credentials; the earlier live login/storage/restore/logout checks remain separate.
+
+The check found and fixed two absent-directory paths: Linux app data and the shared game-launch lease directory now use SpecialFolderOption.DoNotVerify before directory creation. Linux regression coverage is now 62 checks. CI also fixed an early-exit Secret Service pipe error. Native Windows-only Nest import remains excluded from the Linux package. Commercial-game process tracking, physical Deck and Gaming Mode checks remain open.

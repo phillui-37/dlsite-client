@@ -149,3 +149,9 @@ Run trusted CI and release workflows on this PC. Build Windows MSI on the host a
 ## Credential helper early exit
 
 If the Linux credential helper closes its input before reading a session value, return the existing Secret Service unavailable error. End the helper process and do not write a plaintext fallback. Test with input larger than the pipe buffer so the race is repeatable.
+
+## Linux first-run app data
+
+A missing XDG configuration directory must still resolve to an absolute user app-data path. Services may create it on first run. Never fall back to the AppImage working directory, which is read-only.
+
+Resolve the launch-lease directory before XDG_DATA_HOME exists as well. A first game launch must not create lock files in the AppImage mount.

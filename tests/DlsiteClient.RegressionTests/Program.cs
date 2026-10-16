@@ -151,6 +151,25 @@ Write(Path.Combine(candidates, "uninstall.exe"), "exe");
 Check(launcher.FindExecutables(candidates).Count == 1, "EXE discovery handles uppercase and excludes uninstallers");
 if (OperatingSystem.IsLinux())
 {
+    var previousConfigHome = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+    try
+    {
+        var freshConfigHome = Path.Combine(root, "new-config-home");
+        Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", freshConfigHome);
+        Check(new LinuxPathConfig().AppDataRoot == Path.Combine(freshConfigHome, "dlsite-client") && !Directory.Exists(freshConfigHome),
+            "first run resolves an absent XDG config directory without using the working directory");
+    }
+    finally { Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", previousConfigHome); }
+    var previousDataHome = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
+    try
+    {
+        var freshDataHome = Path.Combine(root, "new-data-home");
+        Environment.SetEnvironmentVariable("XDG_DATA_HOME", freshDataHome);
+        var freshLauncher = new LauncherService(db, new NoProcess(), NullLogger<LauncherService>.Instance);
+        Check(freshLauncher.LaunchLockDirectory == Path.Combine(freshDataHome, "dlsite-client", "launch-locks") && !Directory.Exists(freshDataHome),
+            "first launch resolves an absent XDG data directory without using the working directory");
+    }
+    finally { Environment.SetEnvironmentVariable("XDG_DATA_HOME", previousDataHome); }
     var runtimeVariables = LinuxHostEnvironment.Variables.Concat(new[] { "DLSITE_BUNDLED_RUNTIME", "APPDIR", "APPIMAGE" }).ToArray();
     var savedEnvironment = runtimeVariables.Concat(LinuxHostEnvironment.Variables.Select(v => "DLSITE_HOST_" + v))
         .ToDictionary(v => v, Environment.GetEnvironmentVariable);
