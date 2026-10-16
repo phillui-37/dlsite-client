@@ -210,7 +210,9 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
         let dlOnly = ctx.useState false
         let updatesOnly = ctx.useState false
         let tagsLoading = ctx.useState false
-        let tagFilter = ctx.useState ""
+        let tagFilter = ctx.useState (Set.empty<string>)
+        let tagSearch = ctx.useState ""
+        let matchAllTags = ctx.useState true
         let workTypes = ctx.useState (Set.empty<string>)
         let selected = ctx.useState (Set.empty<string>)
         let tick = ctx.useState 0
@@ -256,15 +258,12 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
         let _ = tick.Current
         let bump () = tick.Set(tick.Current + 1)
 
-        let tagArg = if String.IsNullOrWhiteSpace tagFilter.Current then null else tagFilter.Current
         let worksRaw =
-            if workTypes.Current.IsEmpty then
-                svc.Library.Query(
-                    media.Current, search.Current, favOnly.Current, showHidden.Current, dlOnly.Current, tagArg, null, updatesOnly.Current)
-            else
-                let wt = ResizeArray(workTypes.Current) :> System.Collections.Generic.IReadOnlyCollection<string>
-                svc.Library.Query(
-                    media.Current, search.Current, favOnly.Current, showHidden.Current, dlOnly.Current, tagArg, wt, updatesOnly.Current)
+            let wt = ResizeArray(workTypes.Current) :> System.Collections.Generic.IReadOnlyCollection<string>
+            let tags = ResizeArray(tagFilter.Current) :> System.Collections.Generic.IReadOnlyCollection<string>
+            svc.Library.Query(
+                media.Current, search.Current, favOnly.Current, showHidden.Current, dlOnly.Current,
+                null, wt, updatesOnly.Current, tags, matchAllTags.Current)
             |> Seq.toList
 
         let works =
@@ -783,10 +782,9 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                       ]
                   ]
               ] :> IView
-              StackPanel.create [
-                  StackPanel.orientation Orientation.Horizontal
-                  StackPanel.margin (0.0, 4.0, 0.0, 0.0)
-                  StackPanel.children (
+              WrapPanel.create [
+                  WrapPanel.margin (0.0, 4.0, 0.0, 0.0)
+                  WrapPanel.children (
                       [ MediaFilter.All, "library.filter.all"
                         MediaFilter.Games, "library.filter.games"
                         MediaFilter.Images, "library.filter.images"
@@ -858,6 +856,14 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                     elif state = GameLaunchState.Failed then
                         TextBlock.create [ TextBlock.text (w.WorkName + " — " + t (svc.Launcher.GetLaunchError w.Workno)) ] :> IView ]
             @ selectionBar
+            @ (if tagFilter.Current.IsEmpty then [] else
+                [ WrapPanel.create [
+                      WrapPanel.margin (0.0, 8.0, 0.0, 4.0)
+                      WrapPanel.children (
+                          [ filterChip (t "library.tags.clear") false (fun () -> tagFilter.Set Set.empty; page.Set 0) ]
+                          @ (tagFilter.Current |> Set.toList |> List.map (fun tag ->
+                              filterChip (tag + " ×") true (fun () -> tagFilter.Set(tagFilter.Current.Remove tag); page.Set 0))))
+                  ] :> IView ])
             @ (if not expandAdvanced.Current then [] else (
                               (if typesAvailable.IsEmpty then []
                                else
@@ -897,26 +903,67 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                                   (t "library.tagFilter")
                                   expandTags.Current
                                   (fun () ->
-                                      expandTags.Set(not expandTags.Current)
-                                      if not tagsLoading.Current then
+                                      let opening = not expandTags.Current
+                                      expandTags.Set opening
+                                      if opening && not tagsLoading.Current then
                                           tagsLoading.Set true
                                           runPoolAsyncUnit
                                               (fun () -> svc.Library.EnsureLibraryTagsAsync())
                                               (fun () -> tagsLoading.Set false)
                                               (fun _ -> tagsLoading.Set false))
-                                  [ TextBlock.create [
-                                        TextBlock.text (if tagsLoading.Current then t "library.tags.loading" elif tagsAvailable.IsEmpty then t "library.tags.empty" else "")
-                                    ] :> IView
-                                    ComboBox.create [
-                                        ComboBox.width 240.0
-                                        ComboBox.dataItems ((t "library.tags.all" :: tagsAvailable) |> List.toArray)
-                                        ComboBox.selectedItem (if tagFilter.Current = "" then t "library.tags.all" else tagFilter.Current)
-                                        ComboBox.onSelectedItemChanged (fun o ->
-                                            match o with
-                                            | :? string as s ->
-                                                tagFilter.Set (if s = t "library.tags.all" then "" else s)
-                                                page.Set 0
-                                            | _ -> ())
+                                  [ Border.create [
+                                        Border.background colorSurfaceVariant
+                                        Border.cornerRadius 8.0
+                                        Border.padding 12.0
+                                        Border.child (
+                                            StackPanel.create [
+                                                StackPanel.spacing 8.0
+                                                StackPanel.children [
+                                                    TextBlock.create [
+                                                        TextBlock.text (t "library.tags.hint")
+                                                        TextBlock.foreground colorOnSurfaceVariant
+                                                        TextBlock.textWrapping TextWrapping.Wrap
+                                                    ]
+                                                    WrapPanel.create [
+                                                        WrapPanel.children [
+                                                            filterChip (t "library.tags.matchAll") matchAllTags.Current (fun () -> matchAllTags.Set true; page.Set 0)
+                                                            filterChip (t "library.tags.matchAny") (not matchAllTags.Current) (fun () -> matchAllTags.Set false; page.Set 0)
+                                                        ]
+                                                    ]
+                                                    TextBox.create [
+                                                        TextBox.watermark (t "library.tags.search")
+                                                        TextBox.text tagSearch.Current
+                                                        TextBox.onTextChanged tagSearch.Set
+                                                    ]
+                                                    if tagsLoading.Current then
+                                                        ProgressBar.create [ ProgressBar.height 3.0; ProgressBar.isIndeterminate true ]
+                                                    TextBlock.create [
+                                                        TextBlock.text (if tagsLoading.Current then t "library.tags.loading" elif tagsAvailable.IsEmpty then t "library.tags.empty" else "")
+                                                        TextBlock.isVisible (tagsLoading.Current || tagsAvailable.IsEmpty)
+                                                        TextBlock.foreground colorOnSurfaceVariant
+                                                    ]
+                                                    ScrollViewer.create [
+                                                        ScrollViewer.maxHeight 180.0
+                                                        ScrollViewer.horizontalScrollBarVisibility Primitives.ScrollBarVisibility.Disabled
+                                                        ScrollViewer.content (
+                                                            WrapPanel.create [
+                                                                WrapPanel.children (
+                                                                    tagsAvailable
+                                                                    |> List.filter (fun tag -> tag.Contains(tagSearch.Current, StringComparison.OrdinalIgnoreCase))
+                                                                    |> List.map (fun tag ->
+                                                                        CheckBox.create [
+                                                                            CheckBox.content tag
+                                                                            CheckBox.margin (4.0, 2.0, 16.0, 2.0)
+                                                                            CheckBox.isChecked (tagFilter.Current.Contains tag)
+                                                                            CheckBox.onClick (fun _ ->
+                                                                                let current = tagFilter.Current
+                                                                                tagFilter.Set (if current.Contains tag then current.Remove tag else current.Add tag)
+                                                                                page.Set 0)
+                                                                        ] |> View.withKey ("tag:" + tag) :> IView))
+                                                            ])
+                                                    ]
+                                                ]
+                                            ])
                                     ] :> IView ]
                             @ disclosure
                                   (t "library.columns")

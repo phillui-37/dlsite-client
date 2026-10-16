@@ -331,6 +331,39 @@ Check(db.GetWork("TAGBLOCK")!.TagsJson=="[]" && tagHttp.Calls==calls, "blocked i
 Check(tagHttp.Paths.All(p=> !p.StartsWith("/api/")), "public metadata URLs include the work store section");
 Check(tagLibrary.Query(MediaFilter.All,null,false,false,false,"school",updatesOnly:true).Select(w=>w.Workno).SequenceEqual(new[]{"TAGAPI"}), "update and tag filters combine");
 Check(tagLibrary.Query(MediaFilter.All,null,false,false,false,"scho").Count==0, "tag filtering matches whole tags");
+Check(tagLibrary.Query(MediaFilter.All,null,false,false,false,null,tagFilters:["school", "A & B"]).Count==0, "all selected tags must match");
+Check(tagLibrary.Query(MediaFilter.All,null,false,false,false,null,tagFilters:["SCHOOL", "A & B"],matchAllTags:false).Count==2, "any selected tag matches case insensitively");
+Check(tagLibrary.Query(MediaFilter.All,null,false,false,false,null,tagFilters:["school", "SCHOOL"]).Count==1, "duplicate tags do not change all matching");
+// Hold requests open to prove bounded parallelism without timing-based speed assertions.
+var parallelHttp = new ParallelTagHttpFactory();
+var parallelApi = new DlsiteApiClient(parallelHttp, NullLogger<DlsiteApiClient>.Instance);
+db.UpsertWorks(Enumerable.Range(0, 12).Select(i => new WorkItem { Workno = "PAR" + i }));
+var parallelLibrary = new LibraryService(db, parallelApi, new AuthSession(parallelApi,new EmptyCredentials(),NullLogger<AuthSession>.Instance),tagSettings,NullLogger<LibraryService>.Instance);
+var backfill = parallelLibrary.EnsureLibraryTagsAsync();
+await parallelHttp.FourStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+Check(parallelHttp.Peak == 4, "tag backfill starts four concurrent metadata requests");
+parallelHttp.Release.TrySetResult();
+await backfill;
+Check(parallelHttp.Peak == 4, "tag backfill never exceeds four concurrent requests");
+var parallelCalls = parallelHttp.Calls;
+await parallelLibrary.EnsureLibraryTagsAsync();
+Check(parallelHttp.Calls == parallelCalls, "failed metadata requests are not repeated on reopen");
+var cancelledHttp = new ParallelTagHttpFactory();
+var cancelledApi = new DlsiteApiClient(cancelledHttp, NullLogger<DlsiteApiClient>.Instance);
+var cancelledLibrary = new LibraryService(db, cancelledApi, new AuthSession(cancelledApi,new EmptyCredentials(),NullLogger<AuthSession>.Instance),tagSettings,NullLogger<LibraryService>.Instance);
+using (var tagCancellation = new CancellationTokenSource())
+{
+    var pendingTags = cancelledLibrary.EnsureTagsAsync("PAR0", tagCancellation.Token);
+    await cancelledHttp.FirstStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+    await cancelledLibrary.EnsureTagsAsync("PAR0");
+    Check(cancelledHttp.Calls == 1, "overlapping requests for the same work are deduplicated");
+    tagCancellation.Cancel();
+    try { await pendingTags; throw new Exception("Expected tag cancellation"); }
+    catch (OperationCanceledException) { }
+    cancelledHttp.Release.TrySetResult();
+    await cancelledLibrary.EnsureTagsAsync("PAR0");
+    Check(cancelledHttp.Calls > 1, "caller-cancelled metadata remains retryable");
+}
 Check(ProductPageTags.Parse("<div class='main_genre'>1 GB</div><a href='/genre/9'>outside</a>").Count==0, "HTML ignores size blocks and page navigation");
 
 // Delayed start, process exit, duplicate requests and shared launch leases.
@@ -460,4 +493,31 @@ sealed class CountingStarter : IProcessLocale
     public int Calls;
     public bool Throw;
     public void StartWithLocale(string p,string w,string? l,bool j) { if(Throw) throw new IOException("test start failure"); Interlocked.Increment(ref Calls); }
+}
+
+sealed class ParallelTagHttpFactory : IHttpClientFactory
+{
+    public int Active, Peak, Calls;
+    public TaskCompletionSource FirstStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public TaskCompletionSource FourStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public HttpClient CreateClient(string name) => new(new Handler(this));
+    sealed class Handler(ParallelTagHttpFactory owner) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Interlocked.Increment(ref owner.Calls);
+            owner.FirstStarted.TrySetResult();
+            var active = Interlocked.Increment(ref owner.Active);
+            int peak;
+            do { peak = owner.Peak; } while (active > peak && Interlocked.CompareExchange(ref owner.Peak, active, peak) != peak);
+            if (active == 4) owner.FourStarted.TrySetResult();
+            try
+            {
+                await owner.Release.Task.WaitAsync(ct);
+                throw new HttpRequestException("offline test");
+            }
+            finally { Interlocked.Decrement(ref owner.Active); }
+        }
+    }
 }

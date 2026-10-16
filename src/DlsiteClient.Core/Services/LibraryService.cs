@@ -19,7 +19,7 @@ public sealed class LibraryService
     private readonly Dictionary<string, string> _workTypeNames = new(StringComparer.OrdinalIgnoreCase);
     private bool _dlcFeatureEnabled;
     private bool _tagsFromProductJson;
-    private readonly SemaphoreSlim _tagGate = new(1, 1);
+    private readonly SemaphoreSlim _tagGate = new(4, 4);
     private readonly HashSet<string> _tagAttempts = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _cacheGate = new();
 
@@ -79,7 +79,7 @@ public sealed class LibraryService
                     UpdateDate = p.UpdateDate,
                     ThumbUrl = p.ImageUrls?.Thum ?? p.ImageUrls?.Main,
                     MainImageUrl = p.ImageUrls?.Main,
-                    TagsJson = tagsJson,
+                    TagsJson = ParseTags(tagsJson).Count > 0 ? tagsJson : prev?.TagsJson ?? "[]",
                     IsFavorite = prev?.IsFavorite ?? false,
                     IsHidden = prev?.IsHidden ?? false,
                     IsDownloaded = prev?.IsDownloaded ?? false,
@@ -447,8 +447,10 @@ public sealed class LibraryService
 
     public async Task EnsureLibraryTagsAsync(CancellationToken ct = default)
     {
-        foreach (var work in _cache.ToArray())
-            await EnsureTagsAsync(work.Workno, ct).ConfigureAwait(false);
+        await Parallel.ForEachAsync(_cache.ToArray(),
+            new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = ct },
+            async (work, token) => await EnsureTagsAsync(work.Workno, token).ConfigureAwait(false))
+            .ConfigureAwait(false);
     }
 
     public async Task EnsureTagsAsync(string workno, CancellationToken ct = default)
@@ -456,8 +458,12 @@ public sealed class LibraryService
         await _tagGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            var work = _cache.FirstOrDefault(w => w.Workno == workno);
-            if (work is null || ParseTags(work.TagsJson).Count > 0 || _tagAttempts.Contains(workno)) return;
+            WorkItem? work;
+            lock (_cacheGate)
+            {
+                work = _cache.FirstOrDefault(w => w.Workno == workno);
+                if (work is null || ParseTags(work.TagsJson).Count > 0 || !_tagAttempts.Add(workno)) return;
+            }
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
             deadline.CancelAfter(TimeSpan.FromSeconds(15));
             List<string> tags = [];
@@ -477,7 +483,6 @@ public sealed class LibraryService
                 var html = await _api.GetProductPageAsync(workno, work.SiteId, deadline.Token).ConfigureAwait(false);
                 tags = ProductPageTags.Parse(html).ToList();
             }
-            _tagAttempts.Add(workno);
             tags = tags.Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             if (tags.Count == 0) return;
@@ -492,7 +497,12 @@ public sealed class LibraryService
             }
             Changed?.Invoke();
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            lock (_cacheGate) _tagAttempts.Remove(workno);
+            throw;
+        }
+        catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "Tags unavailable for {Workno}", workno);
@@ -523,7 +533,9 @@ public sealed class LibraryService
         bool downloadedOnly,
         string? tagFilter,
         IReadOnlyCollection<string>? workTypeFilter = null,
-        bool updatesOnly = false)
+        bool updatesOnly = false,
+        IReadOnlyCollection<string>? tagFilters = null,
+        bool matchAllTags = true)
     {
         IEnumerable<WorkItem> q = _cache;
         if (!showHidden) q = q.Where(w => !w.IsHidden);
@@ -545,6 +557,15 @@ public sealed class LibraryService
         {
             q = q.Where(w => ParseTags(w.TagsJson)
                 .Any(t => string.Equals(t, tagFilter, StringComparison.OrdinalIgnoreCase)));
+        }
+        if (tagFilters is { Count: > 0 })
+        {
+            var selected = new HashSet<string>(tagFilters, StringComparer.OrdinalIgnoreCase);
+            q = q.Where(w =>
+            {
+                var tags = new HashSet<string>(ParseTags(w.TagsJson), StringComparer.OrdinalIgnoreCase);
+                return matchAllTags ? selected.IsSubsetOf(tags) : selected.Overlaps(tags);
+            });
         }
         return q.ToList();
     }

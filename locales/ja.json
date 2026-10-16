@@ -1,4 +1,9 @@
 {
+  "library.tags.search": "タグを検索",
+  "library.tags.hint": "複数のタグを選択して絞り込めます。取得済みのタグは読み込み中も選択できます。",
+  "library.tags.matchAll": "すべてに一致",
+  "library.tags.matchAny": "いずれかに一致",
+  "library.tags.clear": "タグ選択をクリア",
   "launcher.running": "実行中",
   "launcher.startFailed": "ゲームの起動を確認できませんでした。",
   "launcher.starting": "起動中…",
