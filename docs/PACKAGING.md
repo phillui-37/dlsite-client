@@ -14,7 +14,7 @@ Install:
 
 ```powershell
 .\scripts\publish-msi.ps1
-msiexec /i artifacts\msi\DlsiteClient-0.1.1-win-x64.msi
+msiexec /i artifacts\msi\DlsiteClient-0.1.2-win-x64.msi
 ```
 
 The installer asks for the account scope. **Install for me** goes to `%LOCALAPPDATA%\Programs\DlsiteClient` and does not request UAC. **Install for all users** goes to `%ProgramFiles%\DlsiteClient` and requests UAC. A silent all-users install must already be elevated: `msiexec /i <msi> ALLUSERS=1`.
@@ -58,3 +58,5 @@ The runtime baseline is Ubuntu 24.04, not a promise of compatibility with older 
 The Local CI and release workflow uses the repository runner with labels self-hosted, Windows, X64, dlsite-build. It runs core and headless UI checks, builds the Native AOT MSI, checks MSI maintenance, and publishes the Linux payload. It runs on main/release-branch pushes, tags and manual dispatch. Pull-request events do not run on this personal host.
 
 The Windows runner is installed outside the checkout in D:/actions-runner/dlsite-client. It starts hidden at this account's sign-in. The account must remain signed in for builds. GitHub runner credentials stay outside this repository.
+
+The Linux runner uses label dlsite-appimage and /opt/actions-runner inside the VM's Ubuntu 24.04 chroot. Install .NET SDK 10, Git, WebKitGTK and the packaging dependencies there. The host VM must contain /mnt/dlsite-test/start-actions-runner.sh (from scripts/start-linux-runner.sh) and the prepared serial agent. Set the repository variable DLSITE_BUILD_VM to its absolute .vmx path. scripts/start-build-vm.ps1 starts the VM and runner; scripts/start-linux-runner.sh prevents a second runner with flock. The Linux job runs core/UI checks, publishes and packages the AppImage, then checks the bundled runtime. Tags v* publish both artifacts and SHA256SUMS.txt only after both jobs pass. The VM build runs in Ubuntu userspace; SteamOS desktop/login validation is a separate check.

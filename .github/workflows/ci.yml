@@ -36,24 +36,73 @@ jobs:
         run: ./scripts/publish-msi.ps1
       - name: Check MSI installation and maintenance
         run: ./scripts/test-msi.ps1
-      - name: Publish Linux payload
-        run: |
-          dotnet publish src/DlsiteClient.App/DlsiteClient.App.fsproj -c Release -f net10.0 -r linux-x64 --self-contained true -p:PublishAot=false -p:PublishTrimmed=true -o artifacts/linux-x64
-          if ($LASTEXITCODE -ne 0) { throw 'Linux publish failed' }
-          tar -czf artifacts/linux-payload.tar.gz -C artifacts/linux-x64 .
-          if ($LASTEXITCODE -ne 0) { throw 'Linux payload archive failed' }
+      - name: Start local Linux build VM
+        env:
+          DLSITE_BUILD_VM: ${{ vars.DLSITE_BUILD_VM }}
+        run: ./scripts/start-build-vm.ps1
       - uses: actions/upload-artifact@v4
         with:
           name: windows-msi
           path: artifacts/msi/*.msi
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
-        with:
-          name: linux-payload
-          path: artifacts/linux-payload.tar.gz
-          if-no-files-found: error
-      - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: installer-check-logs
           path: artifacts/msi-test-logs/
+
+  linux:
+    needs: windows
+    runs-on: [self-hosted, Linux, X64, dlsite-appimage]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Core regression checks on Linux
+        run: dotnet run --project tests/DlsiteClient.RegressionTests -c Release
+      - name: Library UI checks on Linux
+        run: dotnet run --project tests/DlsiteClient.LibraryUiTests -c Release
+      - name: Build AppImage with private WebKit
+        run: bash scripts/publish-appimage.sh
+      - name: Check packaged runtime
+        run: |
+          cd artifacts/appimage
+          chmod +x DlsiteClient-linux-x64.AppImage
+          ./DlsiteClient-linux-x64.AppImage --appimage-extract >/dev/null
+          test -x squashfs-root/AppRun
+          test -x squashfs-root/usr/bin/7zz
+          test -f squashfs-root/usr/bin/DlsiteClient.App
+          find squashfs-root -name 'libwebkit2gtk-4.1.so*' -print -quit | grep .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage
+          path: artifacts/appimage/*.AppImage
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, linux]
+    runs-on: [self-hosted, Windows, X64, dlsite-build]
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-msi
+          path: release-assets
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-appimage
+          path: release-assets
+      - name: Publish release and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $assets = Get-ChildItem release-assets -File
+          $checksums = $assets | ForEach-Object { (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + $_.Name }
+          $checksums | Set-Content release-assets/SHA256SUMS.txt -Encoding utf8NoBOM
+          $releaseFiles = (Get-ChildItem release-assets -File).FullName
+          gh release create $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --verify-tag --generate-notes @releaseFiles
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
