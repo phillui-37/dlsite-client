@@ -11,7 +11,7 @@ if ($running -notcontains $VmPath) {
 }
 $deadline = [DateTime]::UtcNow.AddMinutes(3)
 while ([DateTime]::UtcNow -lt $deadline) {
-    $pipe = [IO.Pipes.NamedPipeClientStream]::new('.', 'dlsite-steamos-agent', [IO.Pipes.PipeDirection]::InOut)
+    $pipe = [IO.Pipes.NamedPipeClientStream]::new('.', 'dlsite-steamos-agent', [IO.Pipes.PipeDirection]::InOut, [IO.Pipes.PipeOptions]::Asynchronous)
     try {
         $pipe.Connect(2000)
         $writer = [IO.StreamWriter]::new($pipe, [Text.UTF8Encoding]::new($false), 4096, $true)
@@ -29,6 +29,8 @@ while ([DateTime]::UtcNow -lt $deadline) {
         }
     } catch [TimeoutException] {
         # The VM command agent is still starting.
+    } catch [IO.IOException] {
+        # A VM restart can close the command channel during startup.
     } finally {
         $pipe.Dispose()
     }
