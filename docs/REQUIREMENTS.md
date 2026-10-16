@@ -155,3 +155,7 @@ If the Linux credential helper closes its input before reading a session value, 
 A missing XDG configuration directory must still resolve to an absolute user app-data path. Services may create it on first run. Never fall back to the AppImage working directory, which is read-only.
 
 Resolve the launch-lease directory before XDG_DATA_HOME exists as well. A first game launch must not create lock files in the AppImage mount.
+
+## Personal build-host installer checks
+
+MSI tests must not upgrade or remove an installed copy on this PC. Check all related products by UpgradeCode before installing. Manual tests refuse an occupied host; CI may explicitly skip installer execution while still building the release package, with a visible notice.

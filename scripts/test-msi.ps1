@@ -1,5 +1,6 @@
 #Requires -Version 5.1
 # Tests only the newly built package in artifacts/msi-test-install. Needs elevation for machine scope.
+param([switch]$SkipIfInstalled)
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $package = Join-Path $root "artifacts\msi\DlsiteClient-0.1.2-win-x64.msi"
@@ -10,7 +11,17 @@ $installer = New-Object -ComObject WindowsInstaller.Installer
 $db = $installer.OpenDatabase($package, 0)
 $view = $db.OpenView("SELECT ``Value`` FROM ``Property`` WHERE ``Property``='ProductCode'")
 $view.Execute(); $product = $view.Fetch().StringData(1); $view.Close()
+$view = $db.OpenView("SELECT ``Value`` FROM ``Property`` WHERE ``Property``='UpgradeCode'")
+$view.Execute(); $upgrade = $view.Fetch().StringData(1); $view.Close()
 [void][Runtime.InteropServices.Marshal]::ReleaseComObject($db)
+# ProductCode changes between builds; the family check also protects older installs.
+if (@($installer.RelatedProducts($upgrade)).Count -gt 0) {
+    if ($SkipIfInstalled) {
+        Write-Output '::notice::SKIP MSI install/repair/removal: a related DLsite Client product is installed. Use a clean account or VM for maintenance checks.'
+        return
+    }
+    throw 'A related DLsite Client product is installed. Run maintenance checks in a clean account or VM.'
+}
 Add-Type -TypeDefinition @"
 using System; using System.Text; using System.Runtime.InteropServices;
 public static class DlsiteMsiContext {

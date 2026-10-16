@@ -35,7 +35,7 @@ jobs:
       - name: Build Native AOT MSI
         run: ./scripts/publish-msi.ps1
       - name: Check MSI installation and maintenance
-        run: ./scripts/test-msi.ps1
+        run: ./scripts/test-msi.ps1 -SkipIfInstalled
       - name: Start local Linux build VM
         env:
           DLSITE_BUILD_VM: ${{ vars.DLSITE_BUILD_VM }}
