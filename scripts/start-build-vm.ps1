@@ -19,7 +19,7 @@ while ([DateTime]::UtcNow -lt $deadline) {
         $writer.AutoFlush = $true
         $reader = [IO.StreamReader]::new($pipe, [Text.UTF8Encoding]::new($false), $false, 4096, $true)
         $marker = 'RUNNER_START_' + [Guid]::NewGuid().ToString('N')
-        $writer.WriteLine('nohup bash /mnt/dlsite-test/start-actions-runner.sh >/mnt/dlsite-test/actions-runner.log 2>&1 </dev/null & printf "' + $marker + '\n"')
+        $writer.WriteLine('nohup bash /mnt/dlsite-test/start-actions-runner.sh >/mnt/dlsite-test/runner-start.log 2>&1 </dev/null & printf "' + $marker + '\n"')
         $attemptDeadline = [DateTime]::UtcNow.AddSeconds(8)
         while ([DateTime]::UtcNow -lt $attemptDeadline) {
             $line = $reader.ReadLineAsync()

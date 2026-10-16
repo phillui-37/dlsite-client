@@ -7,6 +7,7 @@ mkdir -p "$BASE"
 mountpoint -q "$BASE" || mount /dev/nvme0n1 "$BASE"
 exec 9>"$BASE/actions-runner.lock"
 flock -n 9 || exit 0
+exec >"$BASE/actions-runner.log" 2>&1
 for path in dev proc sys; do
   mountpoint -q "$ROOT/$path" || mount --rbind "/$path" "$ROOT/$path"
   mount --make-rslave "$ROOT/$path"
