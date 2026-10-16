@@ -1,4 +1,13 @@
 {
+  "launcher.running": "執行中",
+  "launcher.startFailed": "無法確認遊戲已啟動。",
+  "launcher.starting": "啟動中…",
+  "launcher.startTimeout": "3 分鐘內未偵測到遊戲程序。您可以重試。",
+  "detail.openFolder": "開啟作品資料夾",
+  "library.filter.updates": "有更新",
+  "library.tags.all": "所有標籤",
+  "library.tags.empty": "沒有標籤",
+  "library.tags.loading": "正在取得標籤…",
   "app.title": "DLsite Client",
   "nav.library": "媒體庫",
   "nav.downloads": "下載",
@@ -16,6 +25,7 @@
   "auth.sessionExpired": "工作階段已過期，請重新登入。",
   "auth.relogin": "重新登入",
   "auth.queuePaused": "已暫停下載佇列",
+  "library.filters": "篩選與顯示設定",
   "library.search": "以標題、製作單位搜尋",
   "library.filter.all": "全部",
   "library.filter.games": "遊戲",
@@ -87,6 +97,7 @@
   "downloads.upNext": "接下來",
   "downloads.completed": "下載完成",
   "downloads.pause": "暫停",
+  "downloads.resumeAll": "全部繼續",
   "downloads.resume": "繼續",
   "downloads.clearAll": "全部清除",
   "downloads.speed": "目前",
@@ -136,5 +147,7 @@
   "common.ok": "確定",
   "common.cancel": "取消",
   "common.error": "錯誤",
-  "rating.format": "{0}/5"
+  "rating.format": "{0}/5",
+  "auth.secretServiceUnavailable": "無法儲存登入資料。請啟動並解鎖桌面的 Secret Service（KWallet 或 GNOME Keyring），然後重新登入。",
+  "launcher.steamRuntimeMissing": "找不到所需的 Steam Linux Runtime。請透過 Steam 安裝，或安裝 umu-run 後再試一次。"
 }

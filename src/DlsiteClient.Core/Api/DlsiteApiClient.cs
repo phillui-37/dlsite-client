@@ -57,7 +57,6 @@ public sealed class DlsiteApiClient
             .ConfigureAwait(false);
         if (dto?.Meta?.Code is not (0 or 200) && dto?.Data?.SessionId is null)
             _logger.LogWarning("Login meta code unexpected: {Code}", dto?.Meta?.Code);
-        _sessionId = dto?.Data?.SessionId;
         return dto?.Data;
     }
 
@@ -175,9 +174,9 @@ public sealed class DlsiteApiClient
     }
 
     /// <summary>Public product.json — tags/genres + pack/DLC probe.</summary>
-    public async Task<JsonDocument?> GetProductJsonAsync(string workno, CancellationToken ct = default)
+    public async Task<JsonDocument?> GetProductJsonAsync(string workno, CancellationToken ct = default, string? siteId = null)
     {
-        var url = $"{ApiBase}/api/=/product.json?workno={Uri.EscapeDataString(workno)}";
+        var url = $"{ApiBase}/{StoreSection(siteId)}/api/=/product.json?workno={Uri.EscapeDataString(workno)}";
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         req.Headers.UserAgent.ParseAdd(UserAgent);
         if (!string.IsNullOrEmpty(_sessionId))
@@ -204,6 +203,19 @@ public sealed class DlsiteApiClient
             _logger.LogWarning(ex, "product.json parse failed for {Workno}", workno);
             return null;
         }
+    }
+
+    private static string StoreSection(string? siteId) =>
+        !string.IsNullOrWhiteSpace(siteId) && siteId.All(char.IsAsciiLetter) ? siteId : "maniax";
+
+    public async Task<string?> GetProductPageAsync(string workno, string? siteId, CancellationToken ct = default)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Get,
+            $"{ApiBase}/{StoreSection(siteId)}/work/=/product_id/{Uri.EscapeDataString(workno)}.html");
+        req.Headers.UserAgent.ParseAdd(UserAgent);
+        using var res = await SendAsync(req, ct).ConfigureAwait(false);
+        if (!res.IsSuccessStatusCode) return null;
+        return await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
     }
 
     public HttpClient CreateDownloadClient()

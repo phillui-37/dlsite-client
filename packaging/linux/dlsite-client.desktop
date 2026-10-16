@@ -2,7 +2,7 @@
 Type=Application
 Name=DLsite Client
 Comment=DLsite library client
-Exec=dlsite-client %u
+Exec=DlsiteClient.App %u
 Icon=dlsite-client
 Terminal=false
 Categories=Game;Utility;

@@ -2,7 +2,6 @@ module DlsiteClient.App.Services
 
 open System
 open System.IO
-open System.Runtime.InteropServices
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Logging
 open Serilog
@@ -10,8 +9,11 @@ open Serilog.Events
 open DlsiteClient.Core
 open DlsiteClient.Core.Services
 open DlsiteClient.Platform
+#if WINDOWS
 open DlsiteClient.Platform.Windows
+#else
 open DlsiteClient.Platform.Linux
+#endif
 open DlsiteClient.App.Localization
 
 type AppServices =
@@ -22,7 +24,9 @@ type AppServices =
       Settings: SettingsService
       Launcher: LauncherService
       Paths: IPathConfig
+#if WINDOWS
       NestImport: INestSettingsImporter
+#endif
       Protocol: IProtocolHandler
       Startup: IStartupRegistration
       Shell: IShell
@@ -50,13 +54,13 @@ let private bootstrapLogger (logDir: string) (level: string) =
                 retainedFileCountLimit = Nullable 14)
             .CreateLogger()
 
-let private isWindows = RuntimeInformation.IsOSPlatform OSPlatform.Windows
-let private isLinux = RuntimeInformation.IsOSPlatform OSPlatform.Linux
-
 let build (_args: string[]) : AppServices =
     let paths: IPathConfig =
-        if isLinux then LinuxPathConfig() :> IPathConfig
-        else WindowsPathConfig() :> IPathConfig
+#if WINDOWS
+        WindowsPathConfig() :> IPathConfig
+#else
+        LinuxPathConfig() :> IPathConfig
+#endif
 
     Directory.CreateDirectory paths.AppDataRoot |> ignore
     bootstrapLogger paths.DefaultLogDirectory "Information"
@@ -73,22 +77,22 @@ let build (_args: string[]) : AppServices =
         b.ClearProviders() |> ignore
         b.AddSerilog(dispose = true) |> ignore) |> ignore
 
-    if isLinux then
-        sc.AddSingleton<ICredentialStore, LinuxCredentialStore>() |> ignore
-        sc.AddSingleton<INestSettingsImporter, LinuxNestSettingsImporter>() |> ignore
-        sc.AddSingleton<IProtocolHandler, LinuxProtocolHandler>() |> ignore
-        sc.AddSingleton<IStartupRegistration, LinuxStartupRegistration>() |> ignore
-        sc.AddSingleton<IShell, LinuxShell>() |> ignore
-        sc.AddSingleton<IProcessLocale>(fun sp ->
-            let settings = sp.GetRequiredService<SettingsService>()
-            LinuxProcessLocale(fun () -> settings.Current.ProtonPath) :> IProcessLocale) |> ignore
-    else
-        sc.AddSingleton<ICredentialStore, WindowsCredentialStore>() |> ignore
-        sc.AddSingleton<INestSettingsImporter, WindowsNestSettingsImporter>() |> ignore
-        sc.AddSingleton<IProtocolHandler, WindowsProtocolHandler>() |> ignore
-        sc.AddSingleton<IProcessLocale, WindowsProcessLocale>() |> ignore
-        sc.AddSingleton<IStartupRegistration, WindowsStartupRegistration>() |> ignore
-        sc.AddSingleton<IShell, WindowsShell>() |> ignore
+#if WINDOWS
+    sc.AddSingleton<ICredentialStore, WindowsCredentialStore>() |> ignore
+    sc.AddSingleton<INestSettingsImporter, WindowsNestSettingsImporter>() |> ignore
+    sc.AddSingleton<IProtocolHandler, WindowsProtocolHandler>() |> ignore
+    sc.AddSingleton<IProcessLocale, WindowsProcessLocale>() |> ignore
+    sc.AddSingleton<IStartupRegistration, WindowsStartupRegistration>() |> ignore
+    sc.AddSingleton<IShell, WindowsShell>() |> ignore
+#else
+    sc.AddSingleton<ICredentialStore, LinuxCredentialStore>() |> ignore
+    sc.AddSingleton<IProtocolHandler, LinuxProtocolHandler>() |> ignore
+    sc.AddSingleton<IStartupRegistration, LinuxStartupRegistration>() |> ignore
+    sc.AddSingleton<IShell, LinuxShell>() |> ignore
+    sc.AddSingleton<IProcessLocale>(fun sp ->
+        let settings = sp.GetRequiredService<SettingsService>()
+        LinuxProcessLocale(fun () -> settings.Current.ProtonPath) :> IProcessLocale) |> ignore
+#endif
 
     sc.AddDlsiteCore(paths) |> ignore
 
@@ -113,7 +117,9 @@ let build (_args: string[]) : AppServices =
       Settings = settings
       Launcher = sp.GetRequiredService<LauncherService>()
       Paths = paths
+#if WINDOWS
       NestImport = sp.GetRequiredService<INestSettingsImporter>()
+#endif
       Protocol = protocol
       Startup = sp.GetRequiredService<IStartupRegistration>()
       Shell = sp.GetRequiredService<IShell>()

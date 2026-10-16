@@ -19,6 +19,9 @@ public sealed class LibraryService
     private readonly Dictionary<string, string> _workTypeNames = new(StringComparer.OrdinalIgnoreCase);
     private bool _dlcFeatureEnabled;
     private bool _tagsFromProductJson;
+    private readonly SemaphoreSlim _tagGate = new(1, 1);
+    private readonly HashSet<string> _tagAttempts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _cacheGate = new();
 
     public LibraryService(
         LibraryDatabase db,
@@ -41,7 +44,7 @@ public sealed class LibraryService
 
     public void Reload()
     {
-        _cache = _db.GetAllWorks().ToList();
+        lock (_cacheGate) _cache = _db.GetAllWorks().ToList();
         Changed?.Invoke();
     }
 
@@ -316,7 +319,7 @@ public sealed class LibraryService
             ct.ThrowIfCancellationRequested();
             try
             {
-                using var doc = await _api.GetProductJsonAsync(w.Workno, ct).ConfigureAwait(false);
+                using var doc = await _api.GetProductJsonAsync(w.Workno, ct, w.SiteId).ConfigureAwait(false);
                 if (doc is null) continue;
                 var root = doc.RootElement;
                 // product.json is often an array
@@ -330,7 +333,7 @@ public sealed class LibraryService
                     {
                         w.TagsJson = JsonSerializer.Serialize(genres, AppJsonContext.Default.ListString);
                         _tagsFromProductJson = true;
-                        _db.UpsertWorks([w]);
+                        _db.SetTags(w.Workno, w.TagsJson);
                     }
                 }
 
@@ -353,6 +356,7 @@ public sealed class LibraryService
     private static bool TryExtractGenres(JsonElement item, out List<string> genres)
     {
         genres = [];
+        if (item.ValueKind != JsonValueKind.Object) return false;
         if (item.TryGetProperty("genres", out var g) && g.ValueKind == JsonValueKind.Array)
         {
             foreach (var el in g.EnumerateArray())
@@ -441,6 +445,61 @@ public sealed class LibraryService
         return set.OrderBy(t => t, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
+    public async Task EnsureLibraryTagsAsync(CancellationToken ct = default)
+    {
+        foreach (var work in _cache.ToArray())
+            await EnsureTagsAsync(work.Workno, ct).ConfigureAwait(false);
+    }
+
+    public async Task EnsureTagsAsync(string workno, CancellationToken ct = default)
+    {
+        await _tagGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var work = _cache.FirstOrDefault(w => w.Workno == workno);
+            if (work is null || ParseTags(work.TagsJson).Count > 0 || _tagAttempts.Contains(workno)) return;
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            deadline.CancelAfter(TimeSpan.FromSeconds(15));
+            List<string> tags = [];
+            try
+            {
+                using var doc = await _api.GetProductJsonAsync(workno, deadline.Token, work.SiteId).ConfigureAwait(false);
+                if (doc is not null)
+                {
+                    var item = doc.RootElement;
+                    if (item.ValueKind == JsonValueKind.Array && item.GetArrayLength() > 0) item = item[0];
+                    TryExtractGenres(item, out tags);
+                }
+            }
+            catch (HttpRequestException) { /* Public HTML can still supply genres. */ }
+            if (tags.Count == 0)
+            {
+                var html = await _api.GetProductPageAsync(workno, work.SiteId, deadline.Token).ConfigureAwait(false);
+                tags = ProductPageTags.Parse(html).ToList();
+            }
+            _tagAttempts.Add(workno);
+            tags = tags.Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (tags.Count == 0) return;
+            var json = JsonSerializer.Serialize(tags, AppJsonContext.Default.ListString);
+            lock (_cacheGate)
+            {
+                // A sync can provide API tags while the fallback is in flight.
+                var current = _cache.FirstOrDefault(w => w.Workno == workno);
+                if (current is null || ParseTags(current.TagsJson).Count > 0) return;
+                _db.SetTags(workno, json);
+                current.TagsJson = json;
+            }
+            Changed?.Invoke();
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "Tags unavailable for {Workno}", workno);
+        }
+        finally { _tagGate.Release(); }
+    }
+
     public static IReadOnlyList<string> ParseTags(string? tagsJson)
     {
         if (string.IsNullOrWhiteSpace(tagsJson) || tagsJson == "[]")
@@ -463,12 +522,14 @@ public sealed class LibraryService
         bool showHidden,
         bool downloadedOnly,
         string? tagFilter,
-        IReadOnlyCollection<string>? workTypeFilter = null)
+        IReadOnlyCollection<string>? workTypeFilter = null,
+        bool updatesOnly = false)
     {
         IEnumerable<WorkItem> q = _cache;
         if (!showHidden) q = q.Where(w => !w.IsHidden);
         if (favoritesOnly) q = q.Where(w => w.IsFavorite);
         if (downloadedOnly) q = q.Where(w => w.IsDownloaded);
+        if (updatesOnly) q = q.Where(w => w.HasUpdate);
         q = q.Where(w => MatchMedia(w.WorkType, media));
         if (workTypeFilter is { Count: > 0 })
         {
@@ -483,7 +544,7 @@ public sealed class LibraryService
         if (!string.IsNullOrWhiteSpace(tagFilter))
         {
             q = q.Where(w => ParseTags(w.TagsJson)
-                .Any(t => t.Contains(tagFilter, StringComparison.OrdinalIgnoreCase)));
+                .Any(t => string.Equals(t, tagFilter, StringComparison.OrdinalIgnoreCase)));
         }
         return q.ToList();
     }

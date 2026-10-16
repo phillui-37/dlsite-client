@@ -1,4 +1,13 @@
 {
+  "launcher.running": "実行中",
+  "launcher.startFailed": "ゲームの起動を確認できませんでした。",
+  "launcher.starting": "起動中…",
+  "launcher.startTimeout": "3分以内にゲームのプロセスを確認できませんでした。再試行できます。",
+  "detail.openFolder": "作品フォルダを開く",
+  "library.filter.updates": "更新あり",
+  "library.tags.all": "すべてのタグ",
+  "library.tags.empty": "タグがありません",
+  "library.tags.loading": "タグを取得中…",
   "app.title": "DLsite Client",
   "nav.library": "ライブラリ",
   "nav.downloads": "ダウンロード",
@@ -16,6 +25,7 @@
   "auth.sessionExpired": "セッションの有効期限が切れました。再度ログインしてください。",
   "auth.relogin": "再ログイン",
   "auth.queuePaused": "ダウンロードを一時停止しました",
+  "library.filters": "絞り込み・表示設定",
   "library.search": "タイトル・制作元で検索",
   "library.filter.all": "すべて",
   "library.filter.games": "ゲーム",
@@ -87,6 +97,7 @@
   "downloads.upNext": "このあと",
   "downloads.completed": "DL完了",
   "downloads.pause": "一時中止",
+  "downloads.resumeAll": "すべて再開",
   "downloads.resume": "再開",
   "downloads.clearAll": "すべてクリア",
   "downloads.speed": "現在",
@@ -136,5 +147,7 @@
   "common.ok": "OK",
   "common.cancel": "キャンセル",
   "common.error": "エラー",
-  "rating.format": "{0}/5"
+  "rating.format": "{0}/5",
+  "auth.secretServiceUnavailable": "認証情報を保存できません。デスクトップの Secret Service（KWallet または GNOME Keyring）を起動してロックを解除し、もう一度ログインしてください。",
+  "launcher.steamRuntimeMissing": "必要な Steam Linux Runtime が見つかりません。Steam でインストールするか、umu-run をインストールしてから再実行してください。"
 }

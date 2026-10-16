@@ -139,6 +139,19 @@ public sealed class LibraryDatabase : IDisposable
     public void SetHidden(string workno, bool value) =>
         ExecFlag(workno, "is_hidden", value);
 
+    public void SetTags(string workno, string tagsJson)
+    {
+        // Metadata fetches run in the background. Do not share the UI connection
+        // or upsert a stale WorkItem over newer install/download state.
+        using var connection = new SqliteConnection($"Data Source={_dbPath}");
+        connection.Open();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "UPDATE works SET tags_json=$tags WHERE workno=$w";
+        cmd.Parameters.AddWithValue("$tags", tagsJson);
+        cmd.Parameters.AddWithValue("$w", workno);
+        cmd.ExecuteNonQuery();
+    }
+
     public void SetDownloaded(string workno, bool downloaded, string? installPath, string? localUpdateDate)
     {
         using var cmd = Conn.CreateCommand();

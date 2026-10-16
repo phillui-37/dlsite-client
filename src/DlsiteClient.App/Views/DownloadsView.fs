@@ -12,6 +12,7 @@ open DlsiteClient.Core.Models
 open DlsiteClient.App.Localization
 open DlsiteClient.App.Services
 open DlsiteClient.App.Fmt
+open DlsiteClient.App.UiAsync
 
 let private fileName (s: string) =
     if String.IsNullOrEmpty s then "" else s
@@ -124,6 +125,7 @@ let view () =
     Component(fun ctx ->
         let svc = get ()
         let tick = ctx.useState 0
+        let resuming = ctx.useState false
         ctx.useEffect (
             (fun () ->
                 let handler = Action(fun () -> Avalonia.Threading.Dispatcher.UIThread.Post(fun () -> tick.Set(tick.Current + 1)))
@@ -142,11 +144,24 @@ let view () =
             DockPanel.children [
                 Border.create [
                     DockPanel.dock Dock.Top
-                    Border.background "#DBEAFE"
-                    Border.padding 12.0
+                    Border.background "#FFFFFF"
+                    Border.padding 20.0
                     Border.child (
                         StackPanel.create [
                             StackPanel.children [
+                                Button.create [
+                                    Button.content (t "downloads.resumeAll")
+                                    Button.horizontalAlignment HorizontalAlignment.Right
+                                    Button.isEnabled (not resuming.Current &&
+                                        ((upNext |> Seq.exists (fun j -> j.State = DownloadJobState.Paused)) ||
+                                         (done' |> Seq.exists (fun j -> j.State = DownloadJobState.Failed))))
+                                    Button.onClick (fun _ ->
+                                        resuming.Set true
+                                        run
+                                            (fun () -> svc.Downloads.ResumeAll())
+                                            (fun () -> resuming.Set false; bump ())
+                                            (fun _ -> resuming.Set false; bump ()))
+                                ]
                                 TextBlock.create [
                                     TextBlock.text (t "downloads.active")
                                     TextBlock.fontSize 22.0

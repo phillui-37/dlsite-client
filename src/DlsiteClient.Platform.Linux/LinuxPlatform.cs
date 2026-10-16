@@ -10,7 +10,7 @@ public sealed class LinuxPathConfig : IPathConfig
 {
     public string AppDataRoot { get; } =
         Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.DoNotVerify),
             "dlsite-client");
 
     public string DefaultLibraryDirectory => Path.Combine(AppDataRoot, "Library");
@@ -18,154 +18,84 @@ public sealed class LinuxPathConfig : IPathConfig
     public string DefaultLogDirectory => Path.Combine(AppDataRoot, "logs");
 }
 
-/// <summary>
-/// FreeDesktop Secret Service via <c>secret-tool</c> when present; otherwise a 0600 file under XDG data.
-/// </summary>
+/// <summary>FreeDesktop Secret Service. Never stores session values in app files.</summary>
 [SupportedOSPlatform("linux")]
 public sealed class LinuxCredentialStore : ICredentialStore
 {
-    private const string AttrApp = "dlsite-client";
-    private readonly string _fallbackDir;
-    private readonly bool _useSecretTool;
+    public const string UnavailableErrorCode = "secret-service-unavailable";
+    private readonly string _tool;
+    private readonly bool _bundled;
 
     public LinuxCredentialStore(IPathConfig paths)
     {
-        _fallbackDir = Path.Combine(paths.AppDataRoot, "secrets");
-        Directory.CreateDirectory(_fallbackDir);
-        _useSecretTool = CanRun("secret-tool", "--version");
+        var bundled = Environment.GetEnvironmentVariable("DLSITE_SECRET_TOOL");
+        _bundled = !string.IsNullOrWhiteSpace(bundled) && File.Exists(bundled);
+        _tool = _bundled ? bundled! : "secret-tool";
     }
 
-    public Task SaveAsync(string key, string value, CancellationToken ct = default)
+    public async Task SaveAsync(string key, string value, CancellationToken ct = default)
     {
-        ct.ThrowIfCancellationRequested();
-        if (_useSecretTool)
+        var result = await RunAsync(["store", "--label", $"DlsiteClient/{key}", "app", "dlsite-client", "key", key], value, ct);
+        if (!result.Ok) throw new InvalidOperationException(UnavailableErrorCode);
+    }
+
+    public async Task<string?> GetAsync(string key, CancellationToken ct = default)
+    {
+        var result = await RunAsync(["lookup", "app", "dlsite-client", "key", key], null, ct);
+        return result.Ok && result.Output.Length > 0 ? result.Output.TrimEnd('\n', '\r') : null;
+    }
+
+    public async Task DeleteAsync(string key, CancellationToken ct = default)
+    {
+        var result = await RunAsync(["clear", "app", "dlsite-client", "key", key], null, ct);
+        // Exit 1 without an error means that no matching item exists.
+        if (!result.Ok && result.Error.Length > 0) throw new InvalidOperationException(UnavailableErrorCode);
+    }
+
+    private async Task<(bool Ok, string Output, string Error)> RunAsync(string[] args, string? value, CancellationToken ct)
+    {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(TimeSpan.FromSeconds(60));
+        var psi = new ProcessStartInfo(_tool)
         {
-            RunSecretTool(
-                ["store", "--label", $"DlsiteClient/{key}", "app", AttrApp, "key", key],
-                stdin: value);
-            return Task.CompletedTask;
-        }
-
-        var path = FallbackPath(key);
-        File.WriteAllText(path, value, Encoding.UTF8);
-        TryChmod600(path);
-        return Task.CompletedTask;
-    }
-
-    public Task<string?> GetAsync(string key, CancellationToken ct = default)
-    {
-        ct.ThrowIfCancellationRequested();
-        if (_useSecretTool)
+            UseShellExecute = false, RedirectStandardOutput = true,
+            RedirectStandardError = true, RedirectStandardInput = value is not null,
+            CreateNoWindow = true
+        };
+        foreach (var arg in args) psi.ArgumentList.Add(arg);
+        if (!_bundled) LinuxHostEnvironment.Restore(psi);
+        Process? process;
+        try { process = Process.Start(psi); }
+        catch (System.ComponentModel.Win32Exception) { return (false, "", UnavailableErrorCode); }
+        if (process is null) return (false, "", UnavailableErrorCode);
+        using (process)
         {
-            var (ok, stdout) = RunSecretTool(["lookup", "app", AttrApp, "key", key], stdin: null);
-            return Task.FromResult(ok && !string.IsNullOrWhiteSpace(stdout) ? stdout.TrimEnd('\n', '\r') : null);
-        }
-
-        var path = FallbackPath(key);
-        if (!File.Exists(path)) return Task.FromResult<string?>(null);
-        return Task.FromResult<string?>(File.ReadAllText(path, Encoding.UTF8));
-    }
-
-    public Task DeleteAsync(string key, CancellationToken ct = default)
-    {
-        ct.ThrowIfCancellationRequested();
-        if (_useSecretTool)
-        {
-            RunSecretTool(["clear", "app", AttrApp, "key", key], stdin: null);
-            return Task.CompletedTask;
-        }
-
-        var path = FallbackPath(key);
-        if (File.Exists(path)) File.Delete(path);
-        return Task.CompletedTask;
-    }
-
-    private string FallbackPath(string key)
-    {
-        var safe = string.Concat(key.Select(c => char.IsLetterOrDigit(c) || c is '-' or '_' ? c : '_'));
-        return Path.Combine(_fallbackDir, safe + ".secret");
-    }
-
-    private static void TryChmod600(string path)
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo
+            var output = process.StandardOutput.ReadToEndAsync(deadline.Token);
+            var error = process.StandardError.ReadToEndAsync(deadline.Token);
+            try
             {
-                FileName = "chmod",
-                Arguments = $"600 \"{path}\"",
-                UseShellExecute = false,
-                CreateNoWindow = true
-            })?.WaitForExit(2000);
-        }
-        catch
-        {
-            /* best effort */
-        }
-    }
-
-    private static bool CanRun(string file, string args)
-    {
-        try
-        {
-            using var p = Process.Start(new ProcessStartInfo
-            {
-                FileName = file,
-                Arguments = args,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            });
-            if (p is null) return false;
-            p.WaitForExit(2000);
-            return p.ExitCode == 0 || p.ExitCode == 1; // secret-tool --version may vary
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static (bool ok, string stdout) RunSecretTool(IReadOnlyList<string> args, string? stdin)
-    {
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "secret-tool",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                RedirectStandardInput = stdin is not null,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            foreach (var a in args) psi.ArgumentList.Add(a);
-            using var p = Process.Start(psi);
-            if (p is null) return (false, "");
-            if (stdin is not null)
-            {
-                p.StandardInput.Write(stdin);
-                p.StandardInput.Close();
+                if (value is not null)
+                {
+                    await process.StandardInput.WriteAsync(value.AsMemory(), deadline.Token);
+                    process.StandardInput.Close();
+                }
+                await process.WaitForExitAsync(deadline.Token);
+                return (process.ExitCode == 0, await output, await error);
             }
-            var stdout = p.StandardOutput.ReadToEnd();
-            p.WaitForExit(5000);
-            return (p.ExitCode == 0, stdout);
+            catch (IOException)
+            {
+                // A failed helper can close stdin before the session value is written.
+                try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+                return (false, "", UnavailableErrorCode);
+            }
+            catch (OperationCanceledException)
+            {
+                try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+                if (ct.IsCancellationRequested) throw;
+                if (value is null) return (false, "", UnavailableErrorCode);
+                throw new InvalidOperationException(UnavailableErrorCode);
+            }
         }
-        catch
-        {
-            return (false, "");
-        }
-    }
-}
-
-[SupportedOSPlatform("linux")]
-public sealed class LinuxNestSettingsImporter : INestSettingsImporter
-{
-    public bool TryReadPaths(out NestPathImport? paths)
-    {
-        paths = null;
-        return false; // Nest settings.xml is Windows-only
     }
 }
 
@@ -174,10 +104,9 @@ public sealed class LinuxProtocolHandler : IProtocolHandler
 {
     public void Register(string scheme, string exePath)
     {
+        exePath = LinuxDesktopEntry.ResolveExecutable(exePath);
         if (string.IsNullOrWhiteSpace(exePath) || !File.Exists(exePath)) return;
-        var apps = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "applications");
+        var apps = Path.Combine(LinuxDesktopEntry.DataHome, "applications");
         Directory.CreateDirectory(apps);
         var desktop = Path.Combine(apps, "dlsite-client.desktop");
         var content =
@@ -185,22 +114,23 @@ public sealed class LinuxProtocolHandler : IProtocolHandler
             [Desktop Entry]
             Type=Application
             Name=DLsite Client
-            Exec="{exePath}" %u
+            Exec={LinuxDesktopEntry.QuoteExecutable(exePath)} %u
             StartupNotify=false
             MimeType=x-scheme-handler/{scheme};
             NoDisplay=true
             """;
         File.WriteAllText(desktop, content);
+        Directory.CreateDirectory(LinuxDesktopEntry.ConfigHome);
         try
         {
-            Process.Start(new ProcessStartInfo
+            LinuxHostEnvironment.Start(new ProcessStartInfo
             {
                 FileName = "xdg-mime",
                 Arguments = $"default dlsite-client.desktop x-scheme-handler/{scheme}",
                 UseShellExecute = false,
                 CreateNoWindow = true
             })?.WaitForExit(3000);
-            Process.Start(new ProcessStartInfo
+            LinuxHostEnvironment.Start(new ProcessStartInfo
             {
                 FileName = "update-desktop-database",
                 Arguments = $"\"{apps}\"",
@@ -256,25 +186,65 @@ public sealed class LinuxProcessLocale : IProcessLocale
             WorkingDirectory = workingDirectory,
             UseShellExecute = false
         };
+        LinuxHostEnvironment.Restore(psi);
         ApplyLocale(psi, localeName, useJapanLocale);
-        Process.Start(psi);
+        LinuxHostEnvironment.Start(psi);
     }
 
     private void StartWindowsExe(string exePath, string workingDirectory, bool useJapanLocale)
     {
         var proton = ResolveProton();
+        var installKey = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            Encoding.UTF8.GetBytes(Path.GetFullPath(workingDirectory))));
+        var prefix = Path.Combine(LinuxDesktopEntry.DataHome, "dlsite-client", "compatdata", installKey);
+        Directory.CreateDirectory(prefix);
+        var umu = FindOnPath("umu-run");
+        if (umu is not null)
+        {
+            Directory.CreateDirectory(Path.Combine(prefix, "pfx"));
+            var psi = new ProcessStartInfo(umu) { WorkingDirectory = workingDirectory, UseShellExecute = false };
+            LinuxHostEnvironment.Restore(psi);
+            // umu maps WINEPREFIX to STEAM_COMPAT_DATA_PATH; Proton adds /pfx.
+            psi.Environment["WINEPREFIX"] = prefix;
+            psi.Environment["GAMEID"] = "umu-default";
+            if (proton is not null) psi.Environment["PROTONPATH"] = Path.GetDirectoryName(proton)!;
+            psi.ArgumentList.Add(exePath);
+            ApplyLocale(psi, null, useJapanLocale);
+            LinuxHostEnvironment.Start(psi);
+            return;
+        }
         if (proton is not null)
         {
+            var runtime = ResolveSteamRuntime(proton);
             var psi = new ProcessStartInfo
             {
-                FileName = proton,
+                FileName = runtime ?? proton,
                 WorkingDirectory = workingDirectory,
                 UseShellExecute = false
             };
-            psi.ArgumentList.Add("run");
+            // Keep game prefixes outside the install tree so updates do not erase saves.
+            LinuxHostEnvironment.Restore(psi);
+            psi.Environment["STEAM_COMPAT_DATA_PATH"] = prefix;
+            psi.Environment["STEAM_COMPAT_INSTALL_PATH"] = workingDirectory;
+            if (runtime is not null)
+                psi.Environment["STEAM_COMPAT_MOUNTS"] = string.Join(':', new[]
+                {
+                    psi.Environment.TryGetValue("STEAM_COMPAT_MOUNTS", out var mounts) ? mounts ?? "" : "",
+                    workingDirectory, prefix, Path.GetDirectoryName(proton)!, Path.GetDirectoryName(runtime)!
+                }.Where(p => p.Length > 0));
+            var steam = SteamRoots().FirstOrDefault(Directory.Exists);
+            if (steam is not null)
+                psi.Environment["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = steam;
+            if (runtime is not null)
+            {
+                psi.ArgumentList.Add("--verb=waitforexitandrun");
+                psi.ArgumentList.Add("--");
+                psi.ArgumentList.Add(proton);
+            }
+            psi.ArgumentList.Add(runtime is null ? "run" : "waitforexitandrun");
             psi.ArgumentList.Add(exePath);
             ApplyLocale(psi, null, useJapanLocale);
-            Process.Start(psi);
+            LinuxHostEnvironment.Start(psi);
             return;
         }
 
@@ -287,11 +257,13 @@ public sealed class LinuxProcessLocale : IProcessLocale
                 WorkingDirectory = workingDirectory,
                 UseShellExecute = false
             };
+            LinuxHostEnvironment.Restore(psi);
+            psi.Environment["WINEPREFIX"] = Path.Combine(prefix, "wine");
             psi.ArgumentList.Add(exePath);
             ApplyLocale(psi, null, useJapanLocale);
             if (useJapanLocale)
                 psi.Environment["LANG"] = "ja_JP.UTF-8";
-            Process.Start(psi);
+            LinuxHostEnvironment.Start(psi);
             return;
         }
 
@@ -302,29 +274,55 @@ public sealed class LinuxProcessLocale : IProcessLocale
     private string? ResolveProton()
     {
         var overridePath = _protonPath();
-        if (!string.IsNullOrWhiteSpace(overridePath) && File.Exists(overridePath))
-            return overridePath;
+        if (!string.IsNullOrWhiteSpace(overridePath))
+        {
+            if (Directory.Exists(overridePath)) overridePath = Path.Combine(overridePath, "proton");
+            if (File.Exists(overridePath)) return overridePath;
+            throw new FileNotFoundException("Configured Proton launcher was not found.", overridePath);
+        }
 
         foreach (var c in ProtonCandidates())
             if (File.Exists(c)) return c;
         return null;
     }
 
+    private static string? ReadVdfField(string file, string key)
+    {
+        if (!File.Exists(file)) return null;
+        foreach (var line in File.ReadLines(file))
+        {
+            var fields = line.Split('"');
+            if (fields.Length >= 4 && fields[1] == key) return fields[3].Replace("\\\\", "\\");
+        }
+        return null;
+    }
+
+    private static string? ResolveSteamRuntime(string proton)
+    {
+        var required = ReadVdfField(Path.Combine(Path.GetDirectoryName(proton)!, "toolmanifest.vdf"), "require_tool_appid");
+        if (string.IsNullOrEmpty(required)) return null; // Older stand-alone Proton builds.
+        if (required.All(char.IsAsciiDigit))
+            foreach (var library in SteamLibraries())
+            {
+                var directory = ReadVdfField(Path.Combine(library, "steamapps", "appmanifest_" + required + ".acf"), "installdir");
+                if (string.IsNullOrWhiteSpace(directory)) continue;
+                var entry = Path.Combine(library, "steamapps", "common", directory, "_v2-entry-point");
+                if (File.Exists(entry)) return entry;
+            }
+        throw new InvalidOperationException("steam-runtime-missing");
+    }
+
     private static IEnumerable<string> ProtonCandidates()
     {
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var steamRoots = new[]
+        foreach (var root in SteamLibraries())
         {
-            Path.Combine(home, ".steam", "steam"),
-            Path.Combine(home, ".local", "share", "Steam"),
-            Path.Combine(home, ".var", "app", "com.valvesoftware.Steam", "data", "Steam"),
-            Environment.GetEnvironmentVariable("STEAM_COMPAT_CLIENT_INSTALL_PATH") ?? ""
-        };
-        foreach (var root in steamRoots.Where(r => !string.IsNullOrWhiteSpace(r) && Directory.Exists(r)))
-        {
+            var custom = Path.Combine(root, "compatibilitytools.d");
+            if (Directory.Exists(custom))
+                foreach (var dir in Directory.EnumerateDirectories(custom).OrderDescending())
+                    if (File.Exists(Path.Combine(dir, "proton"))) yield return Path.Combine(dir, "proton");
             var common = Path.Combine(root, "steamapps", "common");
             if (!Directory.Exists(common)) continue;
-            foreach (var dir in Directory.EnumerateDirectories(common, "Proton*"))
+            foreach (var dir in Directory.EnumerateDirectories(common, "Proton*").OrderDescending())
             {
                 var proton = Path.Combine(dir, "proton");
                 if (File.Exists(proton)) yield return proton;
@@ -332,9 +330,44 @@ public sealed class LinuxProcessLocale : IProcessLocale
         }
     }
 
+    private static IEnumerable<string> SteamLibraries()
+    {
+        var paths = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var root in SteamRoots().Where(Directory.Exists))
+        {
+            paths.Add(root);
+            var vdf = Path.Combine(root, "steamapps", "libraryfolders.vdf");
+            if (!File.Exists(vdf)) continue;
+            // Only read quoted path fields; no general VDF or command interpretation.
+            foreach (var line in File.ReadLines(vdf))
+            {
+                var parts = line.Split('"');
+                if (parts.Length >= 4 && parts[1] == "path")
+                {
+                    var path = parts[3].Replace("\\\\", "\\");
+                    if (Path.IsPathRooted(path) && Directory.Exists(path)) paths.Add(path);
+                }
+            }
+        }
+        return paths;
+    }
+
+    private static IEnumerable<string> SteamRoots()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return new[]
+        {
+            Environment.GetEnvironmentVariable("STEAM_COMPAT_CLIENT_INSTALL_PATH") ?? "",
+            Path.Combine(home, ".steam", "steam"),
+            Path.Combine(home, ".local", "share", "Steam"),
+            Path.Combine(home, ".var", "app", "com.valvesoftware.Steam", "data", "Steam")
+        }.Where(r => !string.IsNullOrWhiteSpace(r));
+    }
+
     private static string? FindOnPath(string name)
     {
-        var path = Environment.GetEnvironmentVariable("PATH") ?? "";
+        var path = Environment.GetEnvironmentVariable(
+            Environment.GetEnvironmentVariable("DLSITE_BUNDLED_RUNTIME") == "1" ? "DLSITE_HOST_PATH" : "PATH") ?? "";
         foreach (var dir in path.Split(':', StringSplitOptions.RemoveEmptyEntries))
         {
             var full = Path.Combine(dir, name);
@@ -363,7 +396,7 @@ public sealed class LinuxStartupRegistration : IStartupRegistration
 {
     private static string DesktopPath =>
         Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            LinuxDesktopEntry.ConfigHome,
             "autostart",
             "dlsite-client.desktop");
 
@@ -378,14 +411,14 @@ public sealed class LinuxStartupRegistration : IStartupRegistration
             return;
         }
 
-        var exe = Environment.ProcessPath ?? throw new InvalidOperationException("ProcessPath null");
+        var exe = LinuxDesktopEntry.ResolveExecutable(Environment.ProcessPath);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path,
             $"""
             [Desktop Entry]
             Type=Application
             Name=DLsite Client
-            Exec="{exe}"
+            Exec={LinuxDesktopEntry.QuoteExecutable(exe)}
             X-GNOME-Autostart-enabled=true
             """);
     }
@@ -415,7 +448,7 @@ public sealed class LinuxShell : IShell
     {
         try
         {
-            Process.Start(new ProcessStartInfo
+            LinuxHostEnvironment.Start(new ProcessStartInfo
             {
                 FileName = "xdg-open",
                 Arguments = $"\"{target}\"",
@@ -434,7 +467,7 @@ public sealed class LinuxShell : IShell
         yes = false;
         try
         {
-            using var p = Process.Start(new ProcessStartInfo
+            using var p = LinuxHostEnvironment.Start(new ProcessStartInfo
             {
                 FileName = "zenity",
                 ArgumentList = { "--question", "--title", title, "--text", message },
@@ -457,7 +490,7 @@ public sealed class LinuxShell : IShell
         yes = false;
         try
         {
-            using var p = Process.Start(new ProcessStartInfo
+            using var p = LinuxHostEnvironment.Start(new ProcessStartInfo
             {
                 FileName = "kdialog",
                 ArgumentList = { "--title", title, "--yesno", message },

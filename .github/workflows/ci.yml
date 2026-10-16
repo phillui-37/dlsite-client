@@ -1,0 +1,110 @@
+name: Local CI and release
+
+on:
+  push:
+    branches: [main, 'codex/release-*']
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: local-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: [self-hosted, Windows, X64, dlsite-build]
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Check SDK
+        run: dotnet --info
+      - name: Core regression checks
+        run: |
+          dotnet run --project tests/DlsiteClient.RegressionTests -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'Core checks failed' }
+      - name: Library UI checks
+        run: |
+          dotnet run --project tests/DlsiteClient.LibraryUiTests -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'UI checks failed' }
+      - name: Build Native AOT MSI
+        run: ./scripts/publish-msi.ps1
+      - name: Check MSI installation and maintenance
+        run: ./scripts/test-msi.ps1 -SkipIfInstalled
+      - name: Start local Linux build VM
+        env:
+          DLSITE_BUILD_VM: ${{ vars.DLSITE_BUILD_VM }}
+        run: ./scripts/start-build-vm.ps1
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: windows-msi
+          path: artifacts/msi/*.msi
+          if-no-files-found: error
+          compression-level: 0
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: installer-check-logs
+          path: artifacts/msi-test-logs/
+
+  linux:
+    needs: windows
+    runs-on: [self-hosted, Linux, X64, dlsite-appimage]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Core regression checks on Linux
+        run: dotnet run --project tests/DlsiteClient.RegressionTests -c Release
+      - name: Library UI checks on Linux
+        run: dotnet run --project tests/DlsiteClient.LibraryUiTests -c Release
+      - name: Build AppImage with private WebKit
+        run: bash scripts/publish-appimage.sh
+      - name: Check packaged runtime
+        run: |
+          cd artifacts/appimage
+          chmod +x DlsiteClient-linux-x64.AppImage
+          ./DlsiteClient-linux-x64.AppImage --appimage-extract >/dev/null
+          test -x squashfs-root/AppRun
+          test -x squashfs-root/usr/bin/7zz
+          test -f squashfs-root/usr/bin/DlsiteClient.App
+          find squashfs-root -name 'libwebkit2gtk-4.1.so*' -print -quit | grep .
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: linux-appimage
+          path: artifacts/appimage/*.AppImage
+          if-no-files-found: error
+          compression-level: 0
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, linux]
+    runs-on: [self-hosted, Windows, X64, dlsite-build]
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: windows-msi
+          path: release-assets
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: linux-appimage
+          path: release-assets
+      - name: Publish release and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $assets = Get-ChildItem release-assets -File
+          $checksums = $assets | ForEach-Object { (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + $_.Name }
+          $checksums | Set-Content release-assets/SHA256SUMS.txt -Encoding utf8NoBOM
+          $releaseFiles = (Get-ChildItem release-assets -File).FullName
+          gh release create $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --verify-tag --generate-notes @releaseFiles
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }

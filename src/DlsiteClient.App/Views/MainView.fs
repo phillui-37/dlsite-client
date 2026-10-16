@@ -52,39 +52,41 @@ let view () =
                 | Settings, Settings -> true
                 | Detail _, Library -> true
                 | _ -> false
-            Border.create [
-                Border.minWidth 120.0
-                Border.height 48.0
-                Border.padding (16.0, 0.0)
-                Border.cursor (Cursor(StandardCursorType.Hand))
-                Border.background "Transparent"
-                Border.borderBrush (if active then "#1976D2" else "Transparent")
-                Border.borderThickness (0.0, 0.0, 0.0, 3.0)
-                Border.onTapped (fun _ -> page.Set target)
-                Border.child (
-                    TextBlock.create [
-                        TextBlock.text (t key)
-                        TextBlock.verticalAlignment VerticalAlignment.Center
-                        TextBlock.horizontalAlignment HorizontalAlignment.Center
-                        TextBlock.fontWeight (if active then FontWeight.SemiBold else FontWeight.Normal)
-                        TextBlock.foreground (if active then "#1976D2" else "#5F6368")
-                        TextBlock.fontSize 14.0
-                    ])
+            Button.create [
+                Button.classes [ "flat" ]
+                Button.horizontalAlignment HorizontalAlignment.Stretch
+                Button.horizontalContentAlignment HorizontalAlignment.Left
+                Button.minHeight 44.0
+                Button.padding (16.0, 10.0)
+                Button.cornerRadius 8.0
+                Button.background (if active then "#264B78" else "Transparent")
+                Button.foreground (if active then "#FFFFFF" else "#B8C6D9")
+                Button.borderThickness 0.0
+                Button.content (t key)
+                Button.fontWeight (if active then FontWeight.SemiBold else FontWeight.Normal)
+                Button.onClick (fun _ -> page.Set target)
             ]
             :> IView
 
         let nav : IView =
             Border.create [
-                DockPanel.dock Dock.Top
-                Border.background "#FFFFFF"
-                Border.borderBrush "#E0E0E0"
+                DockPanel.dock Dock.Left
+                Border.width 176.0
+                Border.background "#142337"
+                Border.borderBrush "#24364D"
                 Border.borderThickness (0.0, 0.0, 0.0, 1.0)
                 Border.child (
                     StackPanel.create [
-                        StackPanel.orientation Orientation.Horizontal
-                        StackPanel.spacing 4.0
-                        StackPanel.margin (8.0, 0.0)
+                        StackPanel.spacing 8.0
+                        StackPanel.margin (12.0, 24.0)
                         StackPanel.children [
+                            TextBlock.create [
+                                TextBlock.text (t "app.title")
+                                TextBlock.foreground "#FFFFFF"
+                                TextBlock.fontSize 18.0
+                                TextBlock.fontWeight FontWeight.Bold
+                                TextBlock.margin (12.0, 0.0, 0.0, 24.0)
+                            ]
                             tab Page.Library "nav.library"
                             tab Page.Downloads "nav.downloads"
                             tab Page.Settings "nav.settings"
@@ -172,6 +174,6 @@ let view () =
             @ [ body ]
 
         DockPanel.create [
-            DockPanel.background "#FAFAFA"
+            DockPanel.background "#F0F3F8"
             DockPanel.children children
         ])

@@ -25,6 +25,17 @@ public sealed class ArchiveExtractor
     public string? ResolveSevenZip()
     {
         if (_sevenZipPath is not null) return _sevenZipPath;
+        if (OperatingSystem.IsLinux())
+        {
+            foreach (var name in new[] { "7zz", "7z", "7za" })
+                foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator))
+                {
+                    if (string.IsNullOrWhiteSpace(dir)) continue;
+                    var candidate = Path.Combine(dir, name);
+                    if (File.Exists(candidate)) return _sevenZipPath = candidate;
+                }
+            return null;
+        }
         var candidates = new[]
         {
             Path.Combine(AppContext.BaseDirectory, "7z.exe"),
@@ -55,7 +66,7 @@ public sealed class ArchiveExtractor
     {
         var seven = ResolveSevenZip();
         if (seven is null)
-            return (false, "7z.exe not found. Install 7-Zip (scoop install 7zip) or place 7z.exe next to the app.");
+            return (false, "7-Zip not found. Install 7-Zip and make 7zz or 7z available on PATH.");
 
         Directory.CreateDirectory(destDir);
         var psi = new ProcessStartInfo
@@ -69,6 +80,7 @@ public sealed class ArchiveExtractor
         };
         using var proc = new Process { StartInfo = psi };
         proc.Start();
+        using var cancellation = ct.Register(() => { try { proc.Kill(entireProcessTree: true); } catch (InvalidOperationException) { } catch (System.ComponentModel.Win32Exception) { } });
         var stdoutTask = proc.StandardOutput.ReadToEndAsync(ct);
         var stderrTask = proc.StandardError.ReadToEndAsync(ct);
         await proc.WaitForExitAsync(ct).ConfigureAwait(false);
@@ -105,11 +117,16 @@ public sealed class ArchiveExtractor
         {
             using var proc = new Process { StartInfo = psi };
             proc.Start();
+            using var cancellation = ct.Register(() => { try { proc.Kill(entireProcessTree: true); } catch (InvalidOperationException) { } catch (System.ComponentModel.Win32Exception) { } });
+            var stdout = proc.StandardOutput.ReadToEndAsync(ct);
+            var stderr = proc.StandardError.ReadToEndAsync(ct);
             await proc.WaitForExitAsync(ct).ConfigureAwait(false);
+            await Task.WhenAll(stdout, stderr).ConfigureAwait(false);
             if (proc.ExitCode == 0) return ArchiveTestResult.Ok;
             _logger.LogWarning("7z t failed for {Path} code={Code}", archivePath, proc.ExitCode);
             return ArchiveTestResult.Corrupt;
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _logger.LogError(ex, "7z t error");

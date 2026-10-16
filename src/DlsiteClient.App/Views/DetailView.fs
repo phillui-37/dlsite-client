@@ -34,23 +34,40 @@ let view (workno: string) (onBack: unit -> unit) =
         let status = ctx.useState ""
         let tick = ctx.useState 0
 
-        let beginPlay (useJapan: bool) =
+        let launch exePath always useJapan =
             run
-                (fun () -> svc.Launcher.PrepareLaunch workno)
-                (fun d ->
-                    if d.NeedsUserChoice then
-                        let list = d.Candidates |> Seq.toList
-                        exeChoice.Set(Some list)
-                        selectedExe.Set(match list with | h :: _ -> h | [] -> "")
-                    else
-                        svc.Launcher.ConfirmAndLaunch(workno, d.ExePath, false, useJapan)
+                (fun () -> svc.Launcher.ConfirmAndLaunch(workno, exePath, always, useJapan))
+                (fun () ->
+                    exeChoice.Set None
                     tick.Set(tick.Current + 1))
-                (fun ex -> status.Set ex.Message)
+                (fun ex -> status.Set (errorText ex))
+
+        let beginPlay (useJapan: bool) =
+            if svc.Launcher.TryBeginPreparation workno then
+                run
+                    (fun () -> svc.Launcher.PrepareLaunch workno)
+                    (fun d ->
+                        if d.NeedsUserChoice then
+                            svc.Launcher.CancelPreparation workno
+                            let list = d.Candidates |> Seq.toList
+                            exeChoice.Set(Some list)
+                            selectedExe.Set(match list with | h :: _ -> h | [] -> "")
+                            tick.Set(tick.Current + 1)
+                        else
+                            launch d.ExePath false useJapan)
+                    (fun ex -> svc.Launcher.CancelPreparation workno; status.Set (errorText ex))
 
         ctx.useEffect (
             (fun () ->
                 let thumbSub =
                     subscribe (Action(fun () -> tick.Set(tick.Current + 1)))
+                let changed = Action(fun () -> postUi (fun () -> tick.Set(tick.Current + 1)))
+                svc.Library.add_Changed changed
+                svc.Launcher.add_Changed changed
+                runPoolAsyncUnit
+                    (fun () -> svc.Library.EnsureTagsAsync workno)
+                    (fun () -> tick.Set(tick.Current + 1))
+                    (fun _ -> ())
                 match pendingPlayWorkno with
                 | Some w when w = workno ->
                     pendingPlayWorkno <- None
@@ -61,7 +78,10 @@ let view (workno: string) (onBack: unit -> unit) =
                     | _ -> status.Set (t "detail.notFound")
                 | _ -> ()
                 { new IDisposable with
-                    member _.Dispose() = thumbSub.Dispose() }),
+                    member _.Dispose() =
+                        thumbSub.Dispose()
+                        svc.Library.remove_Changed changed
+                        svc.Launcher.remove_Changed changed }),
             [ EffectTrigger.AfterInit ])
 
         let _ = tick.Current
@@ -76,6 +96,8 @@ let view (workno: string) (onBack: unit -> unit) =
             ]
         | Some w ->
             let tags = LibraryService.ParseTags(w.TagsJson) |> Seq.toList
+            let launchState = svc.Launcher.GetLaunchState workno
+            let starting = launchState = GameLaunchState.Preparing || launchState = GameLaunchState.Starting
             let hasSavedExe = not (String.IsNullOrEmpty w.SelectedExe)
 
             DockPanel.create [
@@ -165,7 +187,8 @@ let view (workno: string) (onBack: unit -> unit) =
                                                 ]
                                             if w.IsDownloaded then
                                                 Button.create [
-                                                    Button.content (t "detail.play")
+                                                    Button.content (if launchState = GameLaunchState.Running then t "launcher.running" else t "detail.play")
+                                                    Button.isEnabled (not starting && launchState <> GameLaunchState.Running)
                                                     Button.onClick (fun _ ->
                                                         beginPlay w.UseJapanLocale
                                                         tick.Set(tick.Current + 1))
@@ -188,9 +211,18 @@ let view (workno: string) (onBack: unit -> unit) =
                                                                     status.Set ""
                                                                 tick.Set(tick.Current + 1))
                                                             (fun ex ->
-                                                                status.Set ex.Message
+                                                                status.Set (errorText ex)
                                                                 tick.Set(tick.Current + 1)))
                                                 ]
+                                            Button.create [
+                                                Button.content (t "detail.openFolder")
+                                                Button.isEnabled (not (String.IsNullOrWhiteSpace w.InstallPath) && Directory.Exists w.InstallPath)
+                                                Button.onClick (fun _ ->
+                                                    run
+                                                        (fun () -> svc.Shell.OpenFolder w.InstallPath)
+                                                        (fun () -> ())
+                                                        (fun ex -> status.Set (errorText ex)))
+                                            ]
                                             Button.create [
                                                 Button.content (t "detail.openStore")
                                                 Button.onClick (fun _ ->
@@ -205,6 +237,17 @@ let view (workno: string) (onBack: unit -> unit) =
                                             ]
                                         ]
                                     ]
+                                    if starting then
+                                        StackPanel.create [
+                                            StackPanel.orientation Orientation.Horizontal
+                                            StackPanel.spacing 8.0
+                                            StackPanel.children [
+                                                ProgressBar.create [ ProgressBar.classes [ "circular" ]; ProgressBar.width 24.0; ProgressBar.height 24.0; ProgressBar.isIndeterminate true ]
+                                                TextBlock.create [ TextBlock.text (t "launcher.starting") ]
+                                            ]
+                                        ]
+                                    if launchState = GameLaunchState.Failed then
+                                        TextBlock.create [ TextBlock.text (t (svc.Launcher.GetLaunchError workno)); TextBlock.foreground Brushes.Red ]
                                     match exeChoice.Current with
                                     | None -> TextBlock.create [ TextBlock.text "" ]
                                     | Some exes ->
@@ -235,13 +278,7 @@ let view (workno: string) (onBack: unit -> unit) =
                                                         Button.create [
                                                             Button.content (t "launcher.launch")
                                                             Button.onClick (fun _ ->
-                                                                svc.Launcher.ConfirmAndLaunch(
-                                                                    w.Workno,
-                                                                    selectedExe.Current,
-                                                                    always.Current,
-                                                                    w.UseJapanLocale)
-                                                                exeChoice.Set None
-                                                                tick.Set(tick.Current + 1))
+                                                                launch selectedExe.Current always.Current w.UseJapanLocale)
                                                         ]
                                                         Button.create [
                                                             Button.content (t "launcher.cancel")

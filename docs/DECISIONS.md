@@ -102,3 +102,52 @@
 - Raise `NestSessionExpiredException` → `AuthSession.InvalidateLocalSessionAsync` clears in-memory SID + OS credential store (no Nest DELETE; session already dead).
 - `DownloadQueueService` sets an auth-pause gate (skips pump, cancels active downloads); jobs stay **Queued** so they resume after re-login. User-**Paused** jobs stay paused.
 - UI shows a re-login banner (`NeedsRelogin`) until OAuth/SID login succeeds.
+
+## ADR-019: Compact library shell
+
+- Keep Material.Avalonia and the locked stack. Use a dark navigation rail with light content surfaces and blue actions.
+- Keep controls usable at 1280 × 800 (Steam Deck desktop). Advanced filters start collapsed.
+- Share horizontal scrolling between table header and rows.
+
+## ADR-020: Keep installed data during updates
+
+- Extract into staging on the library filesystem. Commit only after successful extraction. Move the old installation to a retained backup before moving staging into place; restore it if the second move fails.
+- Copy local files absent from the archive and known save files into staging. Keep all original files in the retained backup, including conflicts. Backups are outside the game directory and are not cache.
+- MSI uses the maintained WiX UI library instead of hand-written progress/error dialogs.
+
+## ADR-021: Private Linux login runtime and game isolation
+
+- Bundle WebKitGTK with dependency closure and GTK resources in AppImage. Build on a fixed Linux baseline; retain package provenance and licenses.
+- AppRun records the original host environment before adding private runtime paths. Game and desktop-tool processes restore it.
+- Use umu-run when installed to provide the Steam runtime for Proton outside Steam. Retain direct Proton and Wine fallback. All paths use stable per-install compatibility data outside the install tree.
+- Linux authentication uses Secret Service through a bundled secret-tool. Missing or locked credential service is a login error, not a successful session save.
+- umu WINEPREFIX is the compatibility data root, matching direct Proton STEAM_COMPAT_DATA_PATH; Proton creates pfx inside it. Direct modern Proton uses the required installed Steam runtime entry point.
+- umu can create pfx as a self symlink. Create a real pfx directory first so both umu and direct Proton retain the standard Steam compatibility layout and metadata.
+
+VM validation found that private Mesa can make GLX context creation succeed while the framebuffer window stays black. On Linux without a DRM render node, select Avalonia X11 software rendering explicitly. Keep normal rendering on hardware with a render node.
+
+Direct Proton runtime launches expose the game directory, compatibility data, Proton tool directory and runtime directory through STEAM_COMPAT_MOUNTS. Preserve existing mount entries. This supports libraries outside the home directory, including removable storage.
+
+## ADR-022: Compile platform integration by target
+
+Use the SDK WINDOWS symbol for net10.0-windows. Include NestImportPrompt.fs and the Windows platform project only in that target. Compile the matching platform service wiring and Nest settings action with F# preprocessor conditions. The neutral net10.0 app target is the Linux build and references only the Linux platform implementation. Remove its unused Nest importer stub. Shared HTTP authentication and normal local-library discovery remain cross-platform.
+
+## ADR-023: Tag fallback and game-start tracking
+
+Use the work's store section for public product.json. Parse genres first, then only genre links in product HTML main_genre blocks. This small parser uses bounded regex operations and no new runtime package. Missing, blocked or invalid metadata leaves tags blank. A semaphore serializes requests; successful and empty results are cached for the session. Persist only tags_json so an asynchronous metadata response cannot replace installation state.
+
+Use LauncherService state events for the circular start indicator. Match the selected executable by process name and path, including Wine argv paths. A file lease keyed by executable path prevents another app instance from starting the same target. Retain the lease until process exit or the three-minute detection timeout. Process monitoring uses IGameProcesses for deterministic tests. This does not infer a different executable spawned by a bootstrap launcher, and process detection does not imply window readiness.
+
+## ADR-024: Linux credential-helper early exit
+
+Linux CI exposed an early-exit credential-helper race: writing to closed stdin raised IOException before the helper exit code was handled. Normalize that failure to secret-service-unavailable and terminate the helper. The regression sends a large dummy value to force the closed-pipe path.
+
+## ADR-025: Local CI runtime
+
+The local CI uses the current stable Node 24 actions: checkout 7.0.1, upload-artifact 7.0.2 and download-artifact 8.0.2. Runner 2.338.0 meets their runtime requirements. Upload MSI/AppImage without ZIP compression because these files already contain compressed payloads.
+
+## ADR-026: Linux first-run app-data paths
+
+AppImage first-run testing exposed Environment.GetFolderPath(ApplicationData) returning an empty string when XDG_CONFIG_HOME does not exist. Request SpecialFolderOption.DoNotVerify so path resolution precedes directory creation. Test an absent XDG config directory; do not change process working-directory rules for WebKit.
+
+Apply DoNotVerify to LocalApplicationData for LauncherService's shared lease path too. Linux protocol registration may create XDG_DATA_HOME after that service is constructed; it cannot repair an already captured relative path.

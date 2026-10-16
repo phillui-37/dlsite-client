@@ -2,6 +2,7 @@ namespace DlsiteClient.App
 
 open System
 open System.Diagnostics
+open System.IO
 open System.Runtime.InteropServices
 open System.Threading
 open Avalonia
@@ -14,7 +15,7 @@ module Program =
     extern int private MessageBoxW(nativeint hWnd, string text, string caption, uint32 typ)
 
     let private showFatal (title: string) (msg: string) =
-        eprintfn "%s: %s" title msg
+        Console.Error.WriteLine(String.Concat(title, ": ", msg))
         if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
             MessageBoxW(0n, msg, title, 0x10u) |> ignore
         else
@@ -37,7 +38,8 @@ module Program =
     [<STAThread>]
     [<EntryPoint>]
     let main argv =
-        ignore (Thread.CurrentThread.TrySetApartmentState ApartmentState.STA)
+        if OperatingSystem.IsWindows() then
+            ignore (Thread.CurrentThread.TrySetApartmentState ApartmentState.STA)
         try
             let svc = build argv
             Services.shared <- Some svc
@@ -61,8 +63,13 @@ module Program =
                 let ex = args.ExceptionObject :?> Exception
                 showFatal "DLsite Client" ("Unhandled: " + ex.ToString()))
 
-            AppBuilder
-                .Configure<App>()
+            let builder = AppBuilder.Configure<App>()
+            if OperatingSystem.IsLinux() &&
+               (not (Directory.Exists "/dev/dri") ||
+                Directory.GetFiles("/dev/dri", "renderD*").Length = 0) then
+                builder.With(X11PlatformOptions(RenderingMode = [| X11RenderingMode.Software |])) |> ignore
+
+            builder
                 .UsePlatformDetect()
                 .WithInterFont()
                 .LogToTrace()

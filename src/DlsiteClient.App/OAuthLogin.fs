@@ -50,5 +50,5 @@ let loginAsync (svc: AppServices) : Task<string> =
                     else
                         return "bad callback"
             with ex ->
-                return ex.Message
+                return Localization.errorText ex
     }

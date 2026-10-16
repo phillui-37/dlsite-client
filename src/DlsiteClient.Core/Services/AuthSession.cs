@@ -48,12 +48,12 @@ public sealed class AuthSession
 
     public async Task ApplyLoginAsync(string sessionId, string? loginId, CancellationToken ct = default)
     {
-        _api.LoginWithSessionId(sessionId);
-        LoginId = loginId;
-        NeedsRelogin = false;
         await _creds.SaveAsync(CredKeySid, sessionId, ct).ConfigureAwait(false);
         if (!string.IsNullOrEmpty(loginId))
             await _creds.SaveAsync(CredKeyLoginId, loginId, ct).ConfigureAwait(false);
+        _api.LoginWithSessionId(sessionId);
+        LoginId = loginId;
+        NeedsRelogin = false;
         Changed?.Invoke();
     }
 

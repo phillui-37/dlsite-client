@@ -1,0 +1,5 @@
+*.sh text eol=lf
+*.py text eol=lf
+*.desktop text eol=lf
+packaging/linux/AppRun text eol=lf
+packaging/linux/dlsite-secret-tool text eol=lf
