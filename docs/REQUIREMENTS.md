@@ -124,7 +124,7 @@ Clean-room Nest replacement for library management only. Windows and Linux suppo
 ## Library filters and detail folders — 2026-10-17
 
 - Add an update-available library filter using WorkItem.HasUpdate. Combine it with existing filters and reset paging on change.
-- Keep tag filtering visible even when no tags are cached. Opening it loads missing tags for all library works off the UI thread, with serialized requests and per-session attempt caching. Opening detail also loads missing tags. Persist tags without changing install or download state.
+- Keep tag filtering visible even when no tags are cached. Opening it loads missing tags for all library works off the UI thread, with bounded concurrent requests and per-session attempt caching. Opening detail also loads missing tags. Persist tags without changing install or download state.
 - Prefer purchase API tags, then store-section product.json genres, then genre links in a product page's main_genre block. Ignore other page links. Missing/blocked/failed metadata leaves tags blank; do not bypass geo-blocks or invalidate the login session.
 - Detail shows an Open game folder action when an existing install directory is available. Use the platform shell and report failures with the existing status text.
 - Store fallback labels in locales only. Tag filter matches a complete tag, not a substring.
@@ -159,3 +159,10 @@ Resolve the launch-lease directory before XDG_DATA_HOME exists as well. A first 
 ## Personal build-host installer checks
 
 MSI tests must not upgrade or remove an installed copy on this PC. Check all related products by UpgradeCode before installing. Manual tests refuse an occupied host; CI may explicitly skip installer execution while still building the release package, with a visible notice.
+
+## Library tag filtering refresh
+
+- Replace the single tag dropdown with searchable multi-select checkboxes in a bounded, scrollable filter surface. Keep advanced sections collapsed by default.
+- Default to matching all selected complete tags; offer matching any selected tag. Show selected tags with removal actions and a clear action, including when the filter section is collapsed. Tag search only narrows available choices.
+- Fetch missing tags with at most four concurrent requests, deduplicate overlapping detail/library requests, cache failed attempts per session, and keep caller cancellation retryable. Publish tags as each work completes; cached tags remain usable while loading.
+- Retain cached fallback tags when purchase sync has no API tags. Never change install state while saving metadata.

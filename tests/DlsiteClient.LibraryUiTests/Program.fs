@@ -175,13 +175,23 @@ userToggle (updatesBox ())
 assertUi ((rows ()).Length = 12 && rows () |> List.forall (fun (id,_) -> (works |> List.find (fun w -> w.Workno = id)).HasUpdate)) "update filter resets paging and shows only outdated installs"
 click (byLabel "library.filters")
 click (buttons () |> List.find (fun b -> (string b.Content).EndsWith(Localization.t "library.tagFilter")))
-let tagsCombo = descendants () |> List.pick (function :? ComboBox as cb when cb.Items.Contains("school") -> Some cb | _ -> None)
-tagsCombo.SelectedItem <- "school uniform"; pump ()
+let tagBox tag = descendants () |> List.pick (function :? CheckBox as cb when string cb.Content = tag -> Some cb | _ -> None)
+userToggle (tagBox "school uniform")
 assertUi ((rows ()).IsEmpty) "tag and update filters combine in the UI"
 userToggle (updatesBox ())
 assertUi ((rows ()).Length = 13) "tag filter uses the complete tag name"
-tagsCombo.SelectedItem <- Localization.t "library.tags.all"; pump ()
-assertUi ((rows ()).Length = 20) "all-tags selection clears the tag filter"
+userToggle (tagBox "school")
+assertUi ((rows ()).IsEmpty) "match-all requires both selected tags"
+assertUi ((tagBox "school").IsChecked = Nullable true && (tagBox "school uniform").IsChecked = Nullable true) "multiple tags stay checked"
+click (byLabel "library.tags.matchAny")
+assertUi ((rows ()).Length = 20) "match-any combines selected tags"
+let tagSearchBox = descendants () |> List.pick (function :? TextBox as tb when string tb.PlaceholderText = Localization.t "library.tags.search" -> Some tb | _ -> None)
+tagSearchBox.Text <- "uniform"; pump ()
+assertUi ((rows ()).Length = 20) "tag search does not change selected filters"
+assertUi (descendants () |> List.exists (function :? CheckBox as cb -> string cb.Content = "school" | _ -> false) |> not) "tag search narrows choices"
+click (buttons () |> List.find (fun b -> (string b.Content).EndsWith(Localization.t "library.tagFilter")))
+click (byLabel "library.tags.clear")
+assertUi ((rows ()).Length = 20) "clear tags is available with tag section collapsed"
 let detailWork = works.Head
 let gameDir = Path.Combine(root, "installed-game")
 Directory.CreateDirectory gameDir |> ignore

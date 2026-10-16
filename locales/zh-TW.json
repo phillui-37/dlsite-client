@@ -1,4 +1,9 @@
 {
+  "library.tags.search": "搜尋標籤",
+  "library.tags.hint": "可選擇多個標籤。載入期間仍可使用已取得的標籤。",
+  "library.tags.matchAll": "符合所有標籤",
+  "library.tags.matchAny": "符合任一標籤",
+  "library.tags.clear": "清除標籤選擇",
   "launcher.running": "執行中",
   "launcher.startFailed": "無法確認遊戲已啟動。",
   "launcher.starting": "啟動中…",
