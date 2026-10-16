@@ -52,8 +52,8 @@ Client: Avalonia `WebAuthenticationBroker` (`Avalonia.Controls.WebView` 12.1.x M
 ## Tags (probe)
 
 - Nest `Product.tags`: untyped in OpenAPI — on sync, shape logged once (`LibraryService`); normalized to `string[]` JSON when array / objects-with-`name`
-- Fallback sample (first 5 works): `GET https://www.dlsite.com/api/=/product.json?workno=` → `genres` / `genre`
-- Geo-block: soft-fail on product.json text heuristics; no HTML scrape in v1
+- Tag fallback: `GET https://www.dlsite.com/{siteId}/api/=/product.json?workno=` → `genres` / `genre`. Opening detail fetches missing tags; opening the library tag filter backfills all missing works in the background.
+- If JSON provides no genres, read `/{siteId}/work/=/product_id/{workno}.html` and use genre links inside `div.main_genre`. Non-success and blocked responses leave tags blank. Attempts are cached per session.
 
 ## DLC (probe)
 
@@ -70,3 +70,7 @@ Client: Avalonia `WebAuthenticationBroker` (`Avalonia.Controls.WebView` 12.1.x M
 
 - Nest API: `ja_JP`, `zh_TW`, `en_US`, … (underscore). Map from UI `ja` / `zh-TW`.
 - OIDC `lang`: Nest uses short codes (`ja`, …) via `LanguageEnum.GetLoginCode`
+
+## Tag fallback correction — 2026-10-17
+
+Live public checks: /maniax/fs returns the genre search interface. /maniax/api/=/product.json?workno=RJ01745280 returns HTTP 200 with genres entries containing name/id/search_val. The former /api/=/product.json path lacked the store section. Product HTML has genre anchors within div.main_genre, with /genre/ in href; another main_genre block contains file size and must be ignored. Prefer JSON; use those genre anchors only as fallback. Geo-blocks, age gates and non-success responses yield no tags. No credential import or geo-block bypass is involved.

@@ -9,7 +9,9 @@ open Avalonia.FuncUI
 open Avalonia.FuncUI.DSL
 open Avalonia.FuncUI.Types
 open DlsiteClient.App.Localization
+#if WINDOWS
 open DlsiteClient.App.NestImportPrompt
+#endif
 open DlsiteClient.App.OAuthLogin
 open DlsiteClient.App.Services
 open DlsiteClient.App.UiAsync
@@ -41,7 +43,7 @@ let view () =
             svc.Settings.Update mutate
 
         let errMsg (ex: exn) =
-            if svc.Auth.NeedsRelogin then t "auth.sessionExpired" else ex.Message
+            if svc.Auth.NeedsRelogin then t "auth.sessionExpired" else errorText ex
 
         let applyPaths () =
             persist (fun s ->
@@ -338,6 +340,7 @@ let view () =
                             Button.onClick (fun _ -> svc.Shell.OpenFolder logPath.Current)
                         ]
 
+#if WINDOWS
                         Button.create [
                             Button.content (t "settings.nestImportTitle")
                             Button.onClick (fun _ ->
@@ -352,6 +355,7 @@ let view () =
                                     (fun _ -> ())
                                 status.Set (t "settings.nestImportTitle"))
                         ]
+#endif
 
                         TextBlock.create [
                             TextBlock.text (

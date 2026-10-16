@@ -6,4 +6,8 @@
     <Project Path="src/DlsiteClient.Platform.Windows/DlsiteClient.Platform.Windows.csproj" />
     <Project Path="src/DlsiteClient.Platform/DlsiteClient.Platform.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DlsiteClient.LibraryUiTests/DlsiteClient.LibraryUiTests.fsproj" />
+    <Project Path="tests/DlsiteClient.RegressionTests/DlsiteClient.RegressionTests.csproj" />
+  </Folder>
 </Solution>

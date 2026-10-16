@@ -1,22 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-  WiX dual-scope x64 installer (AOT payload from artifacts/aot-win-x64).
-  Default is per-user (ALLUSERS=2, MSIINSTALLPERUSER=1). The all-users button sets ALLUSERS=1 and carries the UAC shield.
-  publish-msi.ps1 sets Word Count bit 3 so Explorer does not elevate before this dialog.
--->
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<!-- Standard WiX wizard with native Windows Installer dual-purpose scope. -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package
     Name="DLsite Client"
     Manufacturer="DlsiteClient"
-    Version="0.1.0"
+    Version="0.1.2"
     UpgradeCode="A7C3E2B1-5D4F-4A8E-9C21-0F6B8D3E1A42"
     Scope="perUserOrMachine"
-    Compressed="yes">
+    Compressed="yes"
+    InstallerVersion="500">
 
-    <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
+    <MajorUpgrade Schedule="afterInstallInitialize" DowngradeErrorMessage="A newer version is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
-    <Property Id="SCOPECHOSEN" Secure="yes" />
+    <Property Id="INSTALLFOLDER" Secure="yes" />
+    <Property Id="INSTALLSCOPE" Value="user" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(sys.SOURCEFILEDIR)License.rtf" />
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <SetDirectory Id="INSTALLFOLDER" Value="[LocalAppDataFolder]Programs\DlsiteClient"
+                  Condition="NOT Installed AND NOT INSTALLFOLDER AND MSIINSTALLPERUSER=1" />
 
     <Feature Id="Main" Title="DLsite Client" Level="1">
       <ComponentGroupRef Id="AppFiles" />
@@ -25,7 +27,7 @@
     </Feature>
 
     <StandardDirectory Id="ProgramFiles64Folder">
-      <Directory Id="InstallFolder" Name="DlsiteClient" />
+      <Directory Id="INSTALLFOLDER" Name="DlsiteClient" />
     </StandardDirectory>
 
     <StandardDirectory Id="ProgramMenuFolder">
@@ -34,7 +36,7 @@
 
     <StandardDirectory Id="DesktopFolder" />
 
-    <ComponentGroup Id="AppFiles" Directory="InstallFolder">
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
       <Component Id="MainExe" Guid="*">
         <File Id="AppExe" Source="!(bindpath.app)\DlsiteClient.App.exe" KeyPath="yes" />
       </Component>
@@ -50,6 +52,15 @@
       <Component Id="NativeSkia" Guid="*">
         <File Source="!(bindpath.app)\libSkiaSharp.dll" />
       </Component>
+      <Component Id="SevenZipExe" Guid="*" Directory="ToolsDir">
+        <File Source="!(bindpath.app)\tools\7z.exe" />
+      </Component>
+      <Component Id="SevenZipDll" Guid="*" Directory="ToolsDir">
+        <File Source="!(bindpath.app)\tools\7z.dll" />
+      </Component>
+      <Component Id="SevenZipLicense" Guid="*" Directory="ToolsDir">
+        <File Source="!(bindpath.app)\tools\License.txt" />
+      </Component>
       <Component Id="LocaleJa" Guid="*" Directory="LocaleDir">
         <File Source="!(bindpath.app)\locales\ja.json" />
       </Component>
@@ -58,16 +69,17 @@
       </Component>
     </ComponentGroup>
 
-    <DirectoryRef Id="InstallFolder">
+    <DirectoryRef Id="INSTALLFOLDER">
       <Directory Id="LocaleDir" Name="locales" />
+      <Directory Id="ToolsDir" Name="tools" />
     </DirectoryRef>
 
     <Component Id="StartMenuShortcut" Directory="ProgramMenuDir" Guid="*">
       <Shortcut
         Id="StartMenuShortcut"
         Name="DLsite Client"
-        Target="[InstallFolder]DlsiteClient.App.exe"
-        WorkingDirectory="InstallFolder" />
+        Target="[INSTALLFOLDER]DlsiteClient.App.exe"
+        WorkingDirectory="INSTALLFOLDER" />
       <RemoveFolder Id="RemoveProgramMenuDir" On="uninstall" />
       <RegistryValue Root="HKMU" Key="Software\DlsiteClient" Name="Installed" Type="integer" Value="1" KeyPath="yes" />
     </Component>
@@ -76,68 +88,39 @@
       <Shortcut
         Id="DesktopShortcut"
         Name="DLsite Client"
-        Target="[InstallFolder]DlsiteClient.App.exe"
-        WorkingDirectory="InstallFolder" />
+        Target="[INSTALLFOLDER]DlsiteClient.App.exe"
+        WorkingDirectory="INSTALLFOLDER" />
       <RegistryValue Root="HKMU" Key="Software\DlsiteClient" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />
     </Component>
 
-    <UI Id="InstallUi">
-      <Dialog Id="ScopeDlg" Width="370" Height="175" Title="[ProductName]">
-        <Control Id="Body" Type="Text" X="20" Y="20" Width="330" Height="36" Text="Install for the current user, or for all users of this PC." />
-        <Control Id="PerUser" Type="PushButton" X="20" Y="70" Width="240" Height="17" Default="yes" Text="Install for me">
+    <UI>
+      <Dialog Id="ScopeDlg" Width="370" Height="270" Title="[ProductName] Setup">
+        <Control Id="Title" Type="Text" X="15" Y="15" Width="340" Height="20" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Installation scope" />
+        <Control Id="Body" Type="Text" X="20" Y="55" Width="330" Height="30" Text="Choose who can use this application." />
+        <Control Id="Scope" Type="RadioButtonGroup" X="20" Y="100" Width="330" Height="70" Property="INSTALLSCOPE">
+          <RadioButtonGroup Property="INSTALLSCOPE">
+            <RadioButton Value="user" X="0" Y="0" Width="320" Height="18" Text="Only for me (no administrator rights required)" />
+            <RadioButton Value="machine" X="0" Y="30" Width="320" Height="18" Text="For all users (administrator rights required)" />
+          </RadioButtonGroup>
+        </Control>
+        <Control Id="Line" Type="Line" X="0" Y="234" Width="370" Height="0" />
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="&amp;Back">
+          <Publish Event="NewDialog" Value="LicenseAgreementDlg" />
+        </Control>
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="&amp;Next">
           <Publish Property="ALLUSERS" Value="2" Order="1" />
-          <Publish Property="MSIINSTALLPERUSER" Value="1" Order="2" />
-          <Publish Property="SCOPECHOSEN" Value="1" Order="3" />
-          <Publish Event="EndDialog" Value="Return" Order="4" />
+          <Publish Property="MSIINSTALLPERUSER" Value="1" Order="2" Condition="INSTALLSCOPE=&quot;user&quot;" />
+          <Publish Property="MSIINSTALLPERUSER" Value="{}" Order="3" Condition="INSTALLSCOPE=&quot;machine&quot;" />
+          <Publish Property="INSTALLFOLDER" Value="[LocalAppDataFolder]Programs\DlsiteClient" Order="4" Condition="INSTALLSCOPE=&quot;user&quot;" />
+          <Publish Property="INSTALLFOLDER" Value="[ProgramFiles64Folder]DlsiteClient" Order="5" Condition="INSTALLSCOPE=&quot;machine&quot;" />
+          <Publish Event="NewDialog" Value="InstallDirDlg" Order="6" />
         </Control>
-        <Control Id="PerMachine" Type="PushButton" X="20" Y="100" Width="240" Height="17" ElevationShield="yes" Text="Install for all users">
-          <Publish Property="ALLUSERS" Value="1" Order="1" />
-          <Publish Property="SCOPECHOSEN" Value="1" Order="2" />
-          <Publish Event="EndDialog" Value="Return" Order="3" />
-        </Control>
-        <Control Id="Cancel" Type="PushButton" X="290" Y="145" Width="56" Height="17" Cancel="yes" Text="Cancel">
-          <Publish Event="EndDialog" Value="Exit" />
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="Cancel">
+          <Publish Event="SpawnDialog" Value="CancelDlg" />
         </Control>
       </Dialog>
-
-      <Dialog Id="ProgressDlg" Width="370" Height="80" Title="[ProductName]" Modeless="yes">
-        <Control Id="Status" Type="Text" X="20" Y="15" Width="330" Height="12" TabSkip="no" Text="Installing...">
-          <Subscribe Event="ActionText" Attribute="Text" />
-        </Control>
-        <Control Id="ProgressBar" Type="ProgressBar" X="20" Y="40" Width="330" Height="12">
-          <Subscribe Event="SetProgress" Attribute="Progress" />
-        </Control>
-      </Dialog>
-
-      <Dialog Id="ErrorDlg" Width="270" Height="105" Title="[ProductName]" ErrorDialog="yes">
-        <Control Id="ErrorText" Type="Text" X="20" Y="10" Width="230" Height="50" />
-        <Control Id="Y" Type="PushButton" X="50" Y="80" Width="56" Height="17" Text="Yes" />
-        <Control Id="N" Type="PushButton" X="110" Y="80" Width="56" Height="17" Text="No" />
-        <Control Id="A" Type="PushButton" X="170" Y="80" Width="56" Height="17" Text="Abort" />
-        <Control Id="C" Type="PushButton" X="170" Y="80" Width="56" Height="17" Text="Cancel" />
-        <Control Id="I" Type="PushButton" X="50" Y="80" Width="56" Height="17" Text="Ignore" />
-        <Control Id="O" Type="PushButton" X="110" Y="80" Width="56" Height="17" Text="OK" />
-        <Control Id="R" Type="PushButton" X="50" Y="80" Width="56" Height="17" Text="Retry" />
-      </Dialog>
-
-      <Dialog Id="FatalError" Width="270" Height="105" Title="[ProductName]">
-        <Control Id="Text" Type="Text" X="20" Y="15" Width="230" Height="45" Text="Installation failed." />
-        <Control Id="Finish" Type="PushButton" X="190" Y="75" Width="56" Height="17" Default="yes" Cancel="yes" Text="Close">
-          <Publish Event="EndDialog" Value="Exit" />
-        </Control>
-      </Dialog>
-
-      <Dialog Id="UserExit" Width="270" Height="105" Title="[ProductName]">
-        <Control Id="Text" Type="Text" X="20" Y="15" Width="230" Height="45" Text="Installation cancelled." />
-        <Control Id="Finish" Type="PushButton" X="190" Y="75" Width="56" Height="17" Default="yes" Cancel="yes" Text="Close">
-          <Publish Event="EndDialog" Value="Exit" />
-        </Control>
-      </Dialog>
+      <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="ScopeDlg" Order="2" Condition="LicenseAccepted=1" />
+      <Publish Dialog="InstallDirDlg" Control="Back" Event="NewDialog" Value="ScopeDlg" Order="2" />
     </UI>
-
-    <InstallUISequence>
-      <Show Dialog="ScopeDlg" Before="CostFinalize" Condition="NOT Installed AND NOT SCOPECHOSEN" />
-      <Show Dialog="ProgressDlg" Before="ExecuteAction" />
-    </InstallUISequence>
   </Package>
 </Wix>

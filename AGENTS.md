@@ -28,7 +28,7 @@
 - .NET SDK 10 is on `PATH` as `dotnet`. The wrapper sets `DOTNET_ROOT` and `LD_LIBRARY_PATH`.
 - Dev build (managed, not Native AOT): `dotnet build src/DlsiteClient.App/DlsiteClient.App.fsproj -c Release`
 - Dev run needs `DISPLAY`. `dotnet run --project src/DlsiteClient.App -c Release`. UI locale defaults to `ja`.
-- TFM is `net10.0-windows`. `Services.fs` always constructs the Windows platform types. Linux/Proton is M5+ and is not wired. `/usr/local/lib/dlsite-winshim` supplies `CredRead` and `MessageBoxW` so the window can open. `CredRead` returns not-found. That shim is not a credential store.
-- Settings **OK** calls `WindowsStartupRegistration.SetEnabled`. On Linux, `Registry.CurrentUser` throws `NullReferenceException` and the process exits. `SettingsService.Update` writes sqlite before that call. Skip OK when the process must stay up.
+- App TFMs are `net10.0-windows` and `net10.0`. `Services.fs` compiles Windows or Linux platform types by target; only the Windows target includes Nest import. Linux core checks pass in SteamOS recovery; see `docs/STEAMOS.md` for release blockers. `/usr/local/lib/dlsite-winshim` supplies `CredRead` and `MessageBoxW` so the window can open. `CredRead` returns not-found. That shim is not a credential store.
+- Settings apply on change and use the selected platform startup registration. Do not use the old Windows-only settings limitation as a description of current code.
 - Native AOT and MSI stay on Windows (`scripts/publish-aot.ps1`, `vcvars64`). Do not publish AOT on this VM.
 - `7z` is installed for archive checks.

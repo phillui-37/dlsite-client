@@ -49,3 +49,13 @@ Nest 401/403 (or `meta.code` 401/403) → `NestSessionExpiredException` → clea
 ## Logging
 
 Microsoft.Extensions.Logging + file sink with fixed rotation; user sets level + directory only.
+
+## Platform compilation
+
+The app target net10.0-windows defines WINDOWS and references the Windows platform project. The neutral net10.0 target is the Linux app and references the Linux platform project. NestImportPrompt.fs is included only for Windows. F# #if WINDOWS blocks control its startup call, settings action, importer service field and registration. The Linux platform has no Nest importer implementation.
+
+## Metadata and launch state
+
+LibraryService serializes missing-tag fetches behind a semaphore, caches attempts and writes only tags_json through a separate SQLite connection. JSON genres precede product-page genre links. Library and detail subscribe to metadata changes. The tag filter starts background library backfill; the detail page requests its own missing tags.
+
+LauncherService owns Preparing / Starting / Running / Failed state and emits Changed. Process checks run off the UI thread. An executable-path file lease excludes another instance until process exit or start timeout. IGameProcesses supports isolated tests; the real implementation checks process names and module paths, or Wine argv paths. The UI shows the existing Material circular ProgressBar while preparing/starting.

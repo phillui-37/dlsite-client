@@ -117,6 +117,7 @@ public sealed class DownloadQueueService : IAsyncDisposable
                 var existing = _jobs.FirstOrDefault(j => j.Workno == w.Workno
                     && j.State is not DownloadJobState.Completed);
                 if (existing is not null) continue;
+                _jobs.RemoveAll(j => j.Workno == w.Workno && j.State == DownloadJobState.Completed);
                 _jobs.Add(new DownloadJob
                 {
                     Workno = w.Workno,
@@ -197,6 +198,25 @@ public sealed class DownloadQueueService : IAsyncDisposable
         }
         Notify();
         _wake.Writer.TryWrite("resume");
+    }
+
+    /// <summary>Resume interrupted jobs without discarding partial downloads or queue order.</summary>
+    public void ResumeAll()
+    {
+        lock (_gate)
+        {
+            foreach (var job in _jobs)
+            {
+                if (job.State is not (DownloadJobState.Paused or DownloadJobState.Failed))
+                    continue;
+                _extractOnly.TryRemove(job.Workno, out _);
+                job.State = DownloadJobState.Queued;
+                job.ErrorMessage = null;
+            }
+            Persist(force: true);
+        }
+        Notify();
+        _wake.Writer.TryWrite("resume-all");
     }
 
     public void ClearCompleted()
@@ -541,17 +561,14 @@ public sealed class DownloadQueueService : IAsyncDisposable
         var dest = maker.Length > 0 && title.Length > 0
             ? Path.Combine(contentRoot, maker, title)
             : Path.Combine(contentRoot, workno);
-        if (Directory.Exists(dest))
-        {
-            try { Directory.Delete(dest, true); }
-            catch { /* best effort */ }
-        }
-        Directory.CreateDirectory(dest);
-
-        var (ok, message) = await _extractor.ExtractAsync(archive, dest, ct).ConfigureAwait(false);
+        // Imported works can use a different layout. Update the actual installed path.
+        if (!string.IsNullOrWhiteSpace(work?.InstallPath) && Directory.Exists(work.InstallPath))
+            dest = work.InstallPath;
+        var recoveryRoot = Path.Combine(Path.GetDirectoryName(dest)!, ".dlsite-client");
+        using var install = new InstallStaging(dest, recoveryRoot);
+        var (ok, message) = await _extractor.ExtractAsync(archive, install.StagePath, ct).ConfigureAwait(false);
         if (!ok)
         {
-            try { if (Directory.Exists(dest)) Directory.Delete(dest, true); } catch { /* ignore */ }
             var test = await _extractor.TestAsync(archive, ct).ConfigureAwait(false);
             if (test is ArchiveTestResult.Corrupt or ArchiveTestResult.IncompleteSplit)
             {
@@ -563,6 +580,8 @@ public sealed class DownloadQueueService : IAsyncDisposable
             return;
         }
 
+        install.Commit(ct);
+        _logger.LogInformation("Installed {Workno}; previous install backup: {Backup}", workno, install.BackupPath);
         _db.SetDownloaded(workno, true, dest, work?.UpdateDate);
         try
         {

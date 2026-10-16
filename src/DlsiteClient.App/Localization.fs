@@ -39,4 +39,9 @@ type I18n() =
 let mutable globalI18n = I18n()
 
 let t key = globalI18n.T key
+let errorText (ex: exn) =
+    match ex.Message with
+    | "secret-service-unavailable" -> t "auth.secretServiceUnavailable"
+    | "steam-runtime-missing" -> t "launcher.steamRuntimeMissing"
+    | message -> message
 let tf key ([<ParamArray>] args) = globalI18n.Tf(key, args)

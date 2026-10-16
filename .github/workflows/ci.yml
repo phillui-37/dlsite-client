@@ -1,0 +1,59 @@
+name: Local CI and release
+
+on:
+  push:
+    branches: [main, 'codex/release-*']
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: local-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: [self-hosted, Windows, X64, dlsite-build]
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check SDK
+        run: dotnet --info
+      - name: Core regression checks
+        run: |
+          dotnet run --project tests/DlsiteClient.RegressionTests -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'Core checks failed' }
+      - name: Library UI checks
+        run: |
+          dotnet run --project tests/DlsiteClient.LibraryUiTests -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'UI checks failed' }
+      - name: Build Native AOT MSI
+        run: ./scripts/publish-msi.ps1
+      - name: Check MSI installation and maintenance
+        run: ./scripts/test-msi.ps1
+      - name: Publish Linux payload
+        run: |
+          dotnet publish src/DlsiteClient.App/DlsiteClient.App.fsproj -c Release -f net10.0 -r linux-x64 --self-contained true -p:PublishAot=false -p:PublishTrimmed=true -o artifacts/linux-x64
+          if ($LASTEXITCODE -ne 0) { throw 'Linux publish failed' }
+          tar -czf artifacts/linux-payload.tar.gz -C artifacts/linux-x64 .
+          if ($LASTEXITCODE -ne 0) { throw 'Linux payload archive failed' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-msi
+          path: artifacts/msi/*.msi
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-payload
+          path: artifacts/linux-payload.tar.gz
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: installer-check-logs
+          path: artifacts/msi-test-logs/

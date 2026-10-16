@@ -12,7 +12,7 @@ let private tryUpdate (svc: AppServices) (mutate: DlsiteClient.Core.Models.AppSe
         // Never kill startup on settings I/O (AOT JSON bugs, disk, etc.)
         System.Diagnostics.Debug.WriteLine("NestImport settings update failed: " + ex.Message)
 
-/// First-run: offer Nest library/cache paths only (never credentials).
+/// Windows first-run: offer Nest library/cache paths only (never credentials).
 let maybeAsk (svc: AppServices) =
     if svc.Settings.Current.NestImportAsked then ()
     else

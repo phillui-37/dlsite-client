@@ -1,6 +1,55 @@
 #!/bin/sh
-# AppImage entry — runs the published linux-x64 binary next to this script.
+set -eu
 HERE="$(dirname "$(readlink -f "$0")")"
-export PATH="${HERE}/usr/bin:${PATH}"
-export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH:-}"
-exec "${HERE}/usr/bin/DlsiteClient.App" "$@"
+if [ "${DLSITE_BUNDLED_RUNTIME:-}" != 1 ]; then
+    for name in PATH LD_LIBRARY_PATH LD_PRELOAD XDG_DATA_DIRS GIO_MODULE_DIR GIO_EXTRA_MODULES GSETTINGS_SCHEMA_DIR GTK_PATH GTK_EXE_PREFIX GTK_DATA_PREFIX GTK_IM_MODULE_FILE GDK_PIXBUF_MODULE_FILE GDK_PIXBUF_MODULEDIR WEBKIT_EXEC_PATH WEBKIT_INJECTED_BUNDLE_PATH WEBKIT_DISABLE_COMPOSITING_MODE WEBKIT_DISABLE_DMABUF_RENDERER WEBKIT_SKIA_ENABLE_CPU_RENDERING LIBGL_ALWAYS_SOFTWARE EGL_PLATFORM LIBGL_DRIVERS_PATH __EGL_VENDOR_LIBRARY_FILENAMES MESA_LOADER_DRIVER_OVERRIDE GALLIUM_DRIVER; do
+        eval "value=\${$name-__DLSITE_UNSET__}"
+        export "DLSITE_HOST_$name=$value"
+    done
+fi
+export DLSITE_BUNDLED_RUNTIME=1
+export DLSITE_SECRET_TOOL="$HERE/usr/bin/dlsite-secret-tool"
+render_node=false
+for node in /dev/dri/renderD*; do
+    if [ -e "$node" ]; then render_node=true; break; fi
+done
+if [ "$render_node" != true ]; then
+    export LD_LIBRARY_PATH="$HERE/usr/lib/software-gl:$HERE/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    export LIBGL_DRIVERS_PATH="$HERE/usr/lib/software-gl/dri"
+    export __EGL_VENDOR_LIBRARY_FILENAMES="$HERE/usr/share/glvnd/egl_vendor.d/50_mesa.json"
+    export MESA_LOADER_DRIVER_OVERRIDE=llvmpipe
+    export GALLIUM_DRIVER=llvmpipe
+    export WEBKIT_DISABLE_COMPOSITING_MODE="${WEBKIT_DISABLE_COMPOSITING_MODE:-1}"
+    export WEBKIT_DISABLE_DMABUF_RENDERER="${WEBKIT_DISABLE_DMABUF_RENDERER:-1}"
+    export WEBKIT_SKIA_ENABLE_CPU_RENDERING="${WEBKIT_SKIA_ENABLE_CPU_RENDERING:-1}"
+    export LIBGL_ALWAYS_SOFTWARE="${LIBGL_ALWAYS_SOFTWARE:-1}"
+    export EGL_PLATFORM="${EGL_PLATFORM:-surfaceless}"
+fi
+export PATH="$HERE/usr/bin:$PATH"
+if [ "$render_node" = true ]; then
+    export LD_LIBRARY_PATH="$HERE/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
+export WEBKIT_EXEC_PATH="$HERE/usr/lib/webkit2gtk-4.1"
+export WEBKIT_INJECTED_BUNDLE_PATH="$HERE/usr/lib/webkit2gtk-4.1/injected-bundle"
+export XDG_DATA_DIRS="$HERE/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+export GSETTINGS_SCHEMA_DIR="$HERE/usr/share/glib-2.0/schemas"
+export GIO_MODULE_DIR="$HERE/usr/lib/gio/modules"
+export GIO_EXTRA_MODULES=""
+export GTK_PATH="$HERE/usr/lib/gtk-3.0"
+export GTK_EXE_PREFIX="$HERE/usr"
+export GTK_DATA_PREFIX="$HERE/usr"
+export GDK_PIXBUF_MODULEDIR="$HERE/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders"
+cd "$HERE"
+cache="$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/dlsite-client-gtk.XXXXXX")"
+cleanup() { rm -f "$cache/pixbuf" "$cache/immodules"; rmdir "$cache"; }
+trap cleanup EXIT
+export GDK_PIXBUF_MODULE_FILE="$cache/pixbuf"
+export GTK_IM_MODULE_FILE="$cache/immodules"
+"$HERE/usr/bin/gdk-pixbuf-query-loaders" "$GDK_PIXBUF_MODULEDIR/"*.so >"$GDK_PIXBUF_MODULE_FILE"
+"$HERE/usr/bin/gtk-query-immodules-3.0" "$HERE/usr/lib/gtk-3.0/3.0.0/immodules/"*.so >"$GTK_IM_MODULE_FILE"
+"$HERE/usr/bin/DlsiteClient.App" "$@" &
+child=$!
+trap 'kill -TERM "$child" 2>/dev/null || true' INT TERM
+status=0
+wait "$child" || status=$?
+exit "$status"
