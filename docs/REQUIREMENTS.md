@@ -145,3 +145,7 @@ Clean-room Nest replacement for library management only. Windows and Linux suppo
 ## Local GitHub Actions runner
 
 Run trusted CI and release workflows on this PC. Build Windows MSI on the host and AppImage in the local Linux VM. Hold release publication until the workflows pass.
+
+## Credential helper early exit
+
+If the Linux credential helper closes its input before reading a session value, return the existing Secret Service unavailable error. End the helper process and do not write a plaintext fallback. Test with input larger than the pipe buffer so the race is repeatable.

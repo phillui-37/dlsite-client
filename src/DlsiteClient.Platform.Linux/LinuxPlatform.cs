@@ -82,6 +82,12 @@ public sealed class LinuxCredentialStore : ICredentialStore
                 await process.WaitForExitAsync(deadline.Token);
                 return (process.ExitCode == 0, await output, await error);
             }
+            catch (IOException)
+            {
+                // A failed helper can close stdin before the session value is written.
+                try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+                return (false, "", UnavailableErrorCode);
+            }
             catch (OperationCanceledException)
             {
                 try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }

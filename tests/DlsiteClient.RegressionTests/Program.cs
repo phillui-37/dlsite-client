@@ -239,9 +239,9 @@ if (OperatingSystem.IsLinux())
         Environment.SetEnvironmentVariable("DLSITE_SECRET_TOOL", secretTool);
         var secretPaths = new TestPaths(Path.Combine(root, "secret-store"));
         var credentials = new LinuxCredentialStore(secretPaths);
-        try { await credentials.SaveAsync("test", "dummy-value"); throw new Exception("Expected secret store failure"); }
+        try { await credentials.SaveAsync("test", new string('x', 1024 * 1024)); throw new Exception("Expected secret store failure"); }
         catch (InvalidOperationException ex) when (ex.Message == LinuxCredentialStore.UnavailableErrorCode) { }
-        Check(!Directory.Exists(secretPaths.AppDataRoot), "failed Secret Service save has no plaintext file fallback");
+        Check(!Directory.Exists(secretPaths.AppDataRoot), "early-exit Secret Service save fails cleanly without a plaintext fallback");
         Check(await credentials.GetAsync("test") is null, "missing Secret Service item leaves the app signed out");
     }
     finally { Environment.SetEnvironmentVariable("DLSITE_SECRET_TOOL", oldSecretTool); }
