@@ -192,6 +192,29 @@ assertUi (descendants () |> List.exists (function :? CheckBox as cb -> string cb
 click (buttons () |> List.find (fun b -> (string b.Content).EndsWith(Localization.t "library.tagFilter")))
 click (byLabel "library.tags.clear")
 assertUi ((rows ()).Length = 20) "clear tags is available with tag section collapsed"
+// A large catalog creates only one batch of controls, while search covers every tag.
+works.Head.TagsJson <- System.Text.Json.JsonSerializer.Serialize(Array.append [| "school uniform" |] [| for i in 1..130 -> "zz-tag-" + i.ToString("D3") |])
+db.UpsertWorks [works.Head]
+library.Reload()
+pump ()
+click (buttons () |> List.find (fun b -> (string b.Content).EndsWith(Localization.t "library.tagFilter")))
+let searchTags () = descendants () |> List.pick (function :? TextBox as tb when string tb.PlaceholderText = Localization.t "library.tags.search" -> Some tb | _ -> None)
+(searchTags ()).Text <- ""
+pump ()
+let catalogBoxes () = descendants () |> List.choose (function :? CheckBox as cb when (string cb.Content).StartsWith("zz-tag-") || string cb.Content = "school" || string cb.Content = "school uniform" -> Some cb | _ -> None)
+assertUi ((catalogBoxes ()).Length = 60) "large tag catalog initially renders only sixty choices"
+click (byLabel "library.tags.showMore")
+assertUi ((catalogBoxes ()).Length = 120) "show more expands the tag batch"
+(searchTags ()).Text <- "zz-tag-130"
+pump ()
+assertUi ((catalogBoxes ()).Length = 1) "search reaches tags beyond rendered batches"
+userToggle (tagBox "zz-tag-130")
+assertUi ((rows ()).Length = 1) "selecting a searched tag filters the library"
+(searchTags ()).Text <- "no-such-tag"
+pump ()
+assertUi (descendants () |> List.exists (function :? TextBlock as tb -> tb.Text = Localization.t "library.tags.noResults" | _ -> false)) "empty tag search explains no results"
+assertUi ((rows ()).Length = 1) "empty search results retain selected filters"
+click (byLabel "library.tags.clear")
 let detailWork = works.Head
 let gameDir = Path.Combine(root, "installed-game")
 Directory.CreateDirectory gameDir |> ignore

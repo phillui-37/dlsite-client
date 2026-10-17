@@ -57,3 +57,11 @@ Validation: 48 Windows core checks and 33 headless UI checks pass. Public produc
 GitHub Actions now runs on the Windows PC and its local SteamOS VM (Ubuntu 24.04 build userspace). Run 38945000421 passed 48 Windows core checks, 60 Linux core checks, 33 headless UI checks per platform, Native AOT MSI publishing and MSI maintenance checks, AppImage packaging and bundled-runtime checks. CI exposed and fixed an early-exit Linux credential-helper pipe race; its forced large-input regression also passed three local runs. The VM command agent now uses a persistent service, and a full power-off/start check passed. Windows runner startup uses the current account's Startup folder.
 
 The fresh AppImage desktop check found a first-run empty-path defect when XDG directories did not exist. App-data and launch-lease paths now resolve without requiring existing directories. All 62 Linux checks pass. The fixed FUSE package shows library/settings and the native vivion ID login form at 1280 x 800 with a fresh user config root. No new credentials were entered.
+
+### Large tag catalog review — 2026-10-17
+
+Reviewed merged PR #19 and successfully fetched the DLsite /maniax/fs reference. Its genre picker includes keyword search, grouped choices and explicit empty-search feedback. The app follow-up renders tag controls in batches of 60, searches the full cached catalog, shows displayed/total and selected counts, and explains empty searches. Selected chips remain available outside the expanded filters.
+
+Tag queries and catalog enumeration reuse parsed per-work tag sets until the JSON changes. Library service/thumbnail/launch notifications are coalesced on a 100 ms dispatcher timer during background metadata loading. Four-request network concurrency and session failure caching from PR #19 remain in place.
+
+Validation: both Release app targets build (existing warnings remain); 72 core checks and 44 headless UI checks pass. New checks cover changed metadata invalidating the parsed cache and selection/search/show-more behavior with 132 tags. No live-account backfill timing or desktop visual inspection was performed; installers were not rebuilt.

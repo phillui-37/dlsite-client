@@ -166,3 +166,8 @@ MSI tests must not upgrade or remove an installed copy on this PC. Check all rel
 - Default to matching all selected complete tags; offer matching any selected tag. Show selected tags with removal actions and a clear action, including when the filter section is collapsed. Tag search only narrows available choices.
 - Fetch missing tags with at most four concurrent requests, deduplicate overlapping detail/library requests, cache failed attempts per session, and keep caller cancellation retryable. Publish tags as each work completes; cached tags remain usable while loading.
 - Retain cached fallback tags when purchase sync has no API tags. Never change install state while saving metadata.
+
+## Large tag libraries follow-up
+
+- Render tag choices in batches of 60, with show-more and search across the full catalog. Show displayed/total and selected counts, and an explicit no-search-results message. Keep selections when searching or expanding choices.
+- Reuse parsed tag sets per work until its tags JSON changes. Coalesce library view refreshes during metadata backfill to keep the UI responsive.

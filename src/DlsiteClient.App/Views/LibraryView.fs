@@ -212,6 +212,7 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
         let tagsLoading = ctx.useState false
         let tagFilter = ctx.useState (Set.empty<string>)
         let tagSearch = ctx.useState ""
+        let tagLimit = ctx.useState 60
         let matchAllTags = ctx.useState true
         let workTypes = ctx.useState (Set.empty<string>)
         let selected = ctx.useState (Set.empty<string>)
@@ -230,8 +231,15 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
 
         ctx.useEffect (
             (fun () ->
+                let mutable pendingRefresh = 0
+                let refreshTimer = DispatcherTimer()
+                refreshTimer.Interval <- TimeSpan.FromMilliseconds 100.0
+                refreshTimer.Tick.Add(fun _ ->
+                    if System.Threading.Interlocked.Exchange(&pendingRefresh, 0) = 1 then
+                        tick.Set(tick.Current + 1))
+                refreshTimer.Start()
                 let bumpUi () =
-                    Dispatcher.UIThread.Post(fun () -> tick.Set(tick.Current + 1))
+                    System.Threading.Interlocked.Exchange(&pendingRefresh, 1) |> ignore
                 let libHandler = Action(bumpUi)
                 svc.Library.add_Changed libHandler
                 svc.Launcher.add_Changed libHandler
@@ -252,7 +260,8 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                     member _.Dispose() =
                         svc.Library.remove_Changed libHandler
                         svc.Launcher.remove_Changed libHandler
-                        thumbSub.Dispose() }),
+                        thumbSub.Dispose()
+                        refreshTimer.Stop() }),
             [ EffectTrigger.AfterInit ])
 
         let _ = tick.Current
@@ -344,6 +353,10 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
             else w.WorkName
 
         let tagsAvailable = svc.Library.DistinctTags() |> Seq.toList
+        let matchingTags =
+            tagsAvailable
+            |> List.filter (fun tag -> tag.Contains(tagSearch.Current.Trim(), StringComparison.OrdinalIgnoreCase))
+        let shownTags = matchingTags |> List.truncate tagLimit.Current
         let typesAvailable = svc.Library.DistinctWorkTypes() |> Seq.toList
 
         let sortHeader (label: string) (col: SortCol) (key: string) (width: float) : IView =
@@ -933,7 +946,7 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                                                     TextBox.create [
                                                         TextBox.watermark (t "library.tags.search")
                                                         TextBox.text tagSearch.Current
-                                                        TextBox.onTextChanged tagSearch.Set
+                                                        TextBox.onTextChanged (fun value -> tagSearch.Set value; tagLimit.Set 60)
                                                     ]
                                                     if tagsLoading.Current then
                                                         ProgressBar.create [ ProgressBar.height 3.0; ProgressBar.isIndeterminate true ]
@@ -942,14 +955,22 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                                                         TextBlock.isVisible (tagsLoading.Current || tagsAvailable.IsEmpty)
                                                         TextBlock.foreground colorOnSurfaceVariant
                                                     ]
+                                                    TextBlock.create [
+                                                        TextBlock.text (fmt3 (t "library.tags.summary") shownTags.Length matchingTags.Length tagFilter.Current.Count)
+                                                        TextBlock.foreground colorOnSurfaceVariant
+                                                    ]
+                                                    if matchingTags.IsEmpty && not tagsAvailable.IsEmpty then
+                                                        TextBlock.create [
+                                                            TextBlock.text (t "library.tags.noResults")
+                                                            TextBlock.textWrapping TextWrapping.Wrap
+                                                        ]
                                                     ScrollViewer.create [
-                                                        ScrollViewer.maxHeight 180.0
+                                                        ScrollViewer.maxHeight 240.0
                                                         ScrollViewer.horizontalScrollBarVisibility Primitives.ScrollBarVisibility.Disabled
                                                         ScrollViewer.content (
                                                             WrapPanel.create [
                                                                 WrapPanel.children (
-                                                                    tagsAvailable
-                                                                    |> List.filter (fun tag -> tag.Contains(tagSearch.Current, StringComparison.OrdinalIgnoreCase))
+                                                                    shownTags
                                                                     |> List.map (fun tag ->
                                                                         CheckBox.create [
                                                                             CheckBox.content tag
@@ -962,6 +983,11 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                                                                         ] |> View.withKey ("tag:" + tag) :> IView))
                                                             ])
                                                     ]
+                                                    if shownTags.Length < matchingTags.Length then
+                                                        Button.create [
+                                                            Button.content (t "library.tags.showMore")
+                                                            Button.onClick (fun _ -> tagLimit.Set(tagLimit.Current + 60))
+                                                        ]
                                                 ]
                                             ])
                                     ] :> IView ]

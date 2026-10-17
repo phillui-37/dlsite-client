@@ -334,6 +334,12 @@ Check(tagLibrary.Query(MediaFilter.All,null,false,false,false,"scho").Count==0, 
 Check(tagLibrary.Query(MediaFilter.All,null,false,false,false,null,tagFilters:["school", "A & B"]).Count==0, "all selected tags must match");
 Check(tagLibrary.Query(MediaFilter.All,null,false,false,false,null,tagFilters:["SCHOOL", "A & B"],matchAllTags:false).Count==2, "any selected tag matches case insensitively");
 Check(tagLibrary.Query(MediaFilter.All,null,false,false,false,null,tagFilters:["school", "SCHOOL"]).Count==1, "duplicate tags do not change all matching");
+var cachedTagWork = tagLibrary.Works.First(w => w.Workno == "TAGAPI");
+var originalTags = cachedTagWork.TagsJson;
+cachedTagWork.TagsJson = "[\"replacement\"]";
+Check(tagLibrary.Query(MediaFilter.All,null,false,false,false,"replacement").Any(w=>w.Workno=="TAGAPI"), "tag cache observes replaced metadata");
+Check(!tagLibrary.Query(MediaFilter.All,null,false,false,false,"school").Any(w=>w.Workno=="TAGAPI"), "tag cache discards prior metadata");
+cachedTagWork.TagsJson = originalTags;
 // Hold requests open to prove bounded parallelism without timing-based speed assertions.
 var parallelHttp = new ParallelTagHttpFactory();
 var parallelApi = new DlsiteApiClient(parallelHttp, NullLogger<DlsiteApiClient>.Instance);
