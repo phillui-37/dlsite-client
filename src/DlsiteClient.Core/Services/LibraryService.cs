@@ -628,7 +628,9 @@ public sealed class LibraryService
         Reload();
     }
 
-    public async Task MarkUninstalledAsync(string workno, CancellationToken ct = default)
+    /// <summary>Remove the installed copy. Returns false when the folder could not be deleted;
+    /// the installed state is then kept because the work is still on disk.</summary>
+    public async Task<bool> MarkUninstalledAsync(string workno, CancellationToken ct = default)
     {
         var w = _db.GetWork(workno);
         if (w?.InstallPath is { } path && Directory.Exists(path))
@@ -640,18 +642,14 @@ public sealed class LibraryService
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Uninstall delete failed for {Path}", path);
+                // Keep the installed state: the work is still on disk.
+                Reload();
+                return false;
             }
         }
         _db.SetDownloaded(workno, false, null, null);
         _db.SetSelectedExe(workno, null, w?.UseJapanLocale ?? false);
         Reload();
-    }
-
-    public void ClearSelectedExe(string workno)
-    {
-        var w = _db.GetWork(workno);
-        if (w is null) return;
-        _db.SetSelectedExe(workno, null, w.UseJapanLocale);
-        Reload();
+        return true;
     }
 }

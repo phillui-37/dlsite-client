@@ -17,6 +17,9 @@ Clean-room Nest replacement for library management only. Windows and Linux suppo
 - Search: fuzzy title + maker only
 - Metadata + thumbnails load **off the UI thread**; placeholders/skeletons until ready; thumbs fill in as fetches complete
 - **Local install detect:** reconcile library folder against purchases. Nest layout is `{libraryDirectory}/Game/{makerName}/{workName}` (also accept `{makerName}/{workName}` and `{workno}` at the library root). Run after purchase sync and on library view boot (off UI thread). Downloaded column header must fit full i18n label (no clip).
+- **Library boot and sync entry:** library view boot loads work-type names and runs local install detect only; purchase sync is never started automatically from library boot. When the user is signed in and no work is stored, the library empty state offers the existing Sync action, run off the UI thread, with a busy state and a visible localized failure.
+- **Sort control:** the sort column and direction are selectable in every mode (list headers stay as a shortcut); grid and hybrid must not show an order the user cannot see or change.
+- **Uninstall failure:** when the installed folder cannot be deleted, keep the installed state and show a localized failure. Batch uninstall reports that at least one work failed.
 
 ## Tags
 

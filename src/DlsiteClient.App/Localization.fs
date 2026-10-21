@@ -39,6 +39,14 @@ type I18n() =
 let mutable globalI18n = I18n()
 
 let t key = globalI18n.T key
+
+/// Work type label: API display name, then the workType.<code> locale entry, then the raw code.
+let workTypeLabel (apiName: string) (code: string) =
+    if not (System.String.Equals(apiName, code, System.StringComparison.Ordinal)) then apiName
+    else
+        let key = "workType." + code
+        let loc = t key
+        if loc = key then code else loc
 let errorText (ex: exn) =
     match ex.Message with
     | "secret-service-unavailable" -> t "auth.secretServiceUnavailable"

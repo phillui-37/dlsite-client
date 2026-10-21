@@ -119,6 +119,7 @@ let view (workno: string) (onBack: unit -> unit) =
                                         TextBlock.text w.WorkName
                                         TextBlock.fontSize 24.0
                                         TextBlock.fontWeight FontWeight.Bold
+                                        TextBlock.textWrapping TextWrapping.Wrap
                                     ]
                                     TextBlock.create [
                                         TextBlock.text (fmt2 "{0} : {1}" (t "library.col.maker") w.MakerName)
@@ -131,7 +132,11 @@ let view (workno: string) (onBack: unit -> unit) =
                                             fmt2 "{0} : {1}" (t "library.col.purchaseDate") (orDash w.RegistDate))
                                     ]
                                     TextBlock.create [
-                                        TextBlock.text (fmt2 "{0} : {1}" (t "library.col.workType") w.WorkType)
+                                        TextBlock.text (
+                                            fmt2
+                                                "{0} : {1}"
+                                                (t "library.col.workType")
+                                                (workTypeLabel (svc.Library.WorkTypeDisplay w.WorkType) w.WorkType))
                                     ]
                                     if w.IsDlc && svc.Library.DlcFeatureEnabled then
                                         TextBlock.create [
@@ -171,10 +176,8 @@ let view (workno: string) (onBack: unit -> unit) =
                                                 fmt2 "{0} : {1}" (t "launcher.savedExe") (fileNameOrPath w.SelectedExe))
                                             TextBlock.opacity 0.8
                                         ]
-                                    StackPanel.create [
-                                        StackPanel.orientation Orientation.Horizontal
-                                        StackPanel.spacing 8.0
-                                        StackPanel.children [
+                                    WrapPanel.create [
+                                        WrapPanel.children [
                                             Button.create [
                                                 Button.content (t "detail.download")
                                                 Button.onClick (fun _ -> svc.Downloads.Enqueue([ w ], false))
@@ -196,7 +199,6 @@ let view (workno: string) (onBack: unit -> unit) =
                                                 Button.create [
                                                     Button.content (t "launcher.changeExe")
                                                     Button.onClick (fun _ ->
-                                                        svc.Library.ClearSelectedExe w.Workno
                                                         let install =
                                                             if isNull w.InstallPath then "" else w.InstallPath
                                                         run
@@ -206,6 +208,8 @@ let view (workno: string) (onBack: unit -> unit) =
                                                                 if exes.IsEmpty then
                                                                     status.Set (t "launcher.noExe")
                                                                 else
+                                                                    // Restore the saved choice when the user only wants to pick today's exe.
+                                                                    always.Set false
                                                                     exeChoice.Set(Some exes)
                                                                     selectedExe.Set(List.head exes)
                                                                     status.Set ""
@@ -247,7 +251,7 @@ let view (workno: string) (onBack: unit -> unit) =
                                             ]
                                         ]
                                     if launchState = GameLaunchState.Failed then
-                                        TextBlock.create [ TextBlock.text (t (svc.Launcher.GetLaunchError workno)); TextBlock.foreground Brushes.Red ]
+                                        TextBlock.create [ TextBlock.text (t (svc.Launcher.GetLaunchError workno)); TextBlock.foreground "#B3261E"; TextBlock.textWrapping TextWrapping.Wrap ]
                                     match exeChoice.Current with
                                     | None -> TextBlock.create [ TextBlock.text "" ]
                                     | Some exes ->
@@ -290,7 +294,8 @@ let view (workno: string) (onBack: unit -> unit) =
                                         ]
                                     TextBlock.create [
                                         TextBlock.text status.Current
-                                        TextBlock.foreground Brushes.Red
+                                        TextBlock.foreground "#B3261E"
+                                        TextBlock.textWrapping TextWrapping.Wrap
                                     ]
                                 ]
                             ])

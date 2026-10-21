@@ -100,10 +100,16 @@ let view () =
                             TextBlock.text (
                                 if svc.Auth.IsLoggedIn then
                                     let id = svc.Auth.LoginId
-                                    if isNull id || id = "" then "SID OK" else id
+                                    if isNull id || id = "" then t "settings.account.sidOk" else id
                                 else
                                     t "auth.login")
                         ]
+                        if busy.Current || not (String.IsNullOrEmpty status.Current) then
+                            TextBlock.create [
+                                TextBlock.text (if busy.Current then t "settings.working" else status.Current)
+                                TextBlock.foreground "#607087"
+                                TextBlock.textWrapping TextWrapping.Wrap
+                            ]
                         StackPanel.create [
                             StackPanel.orientation Orientation.Horizontal
                             StackPanel.spacing 8.0
@@ -174,8 +180,9 @@ let view () =
                             TextBlock.opacity 0.7
                         ]
                         TextBox.create [
-                            TextBox.watermark "__DLsite_SID"
+                            TextBox.watermark (t "auth.sidPlaceholder")
                             TextBox.text sidInput.Current
+                            TextBox.passwordChar (char 0x25CF)
                             TextBox.onTextChanged sidInput.Set
                         ]
                         Button.create [
@@ -188,6 +195,7 @@ let view () =
                                     runAsyncUnit
                                         (fun () -> svc.Auth.ApplyLoginAsync(sid, null))
                                         (fun () ->
+                                            sidInput.Set ""
                                             busy.Set false
                                             status.Set (t "auth.loginOk")
                                             busy.Set true
@@ -209,6 +217,7 @@ let view () =
                             TextBlock.text (t "settings.environment")
                             TextBlock.fontSize 18.0
                             TextBlock.fontWeight FontWeight.Bold
+                            TextBlock.margin (0.0, 16.0, 0.0, 0.0)
                         ]
                         TextBlock.create [ TextBlock.text (t "settings.libraryFolder") ]
                         TextBox.create [
@@ -251,6 +260,7 @@ let view () =
                             TextBlock.text (t "settings.download")
                             TextBlock.fontSize 18.0
                             TextBlock.fontWeight FontWeight.Bold
+                            TextBlock.margin (0.0, 16.0, 0.0, 0.0)
                         ]
                         TextBlock.create [ TextBlock.text (t "settings.maxDownloads") ]
                         TextBox.create [
@@ -275,18 +285,28 @@ let view () =
                         ]
                         TextBlock.create [ TextBlock.text (t "settings.proxy") ]
                         ComboBox.create [
-                            ComboBox.dataItems [ "off"; "system"; "custom" ]
-                            ComboBox.selectedItem proxyMode.Current
+                            ComboBox.dataItems [ t "settings.proxy.off"; t "settings.proxy.system"; t "settings.proxy.custom" ]
+                            ComboBox.selectedItem (
+                                match proxyMode.Current with
+                                | "system" -> t "settings.proxy.system"
+                                | "custom" -> t "settings.proxy.custom"
+                                | _ -> t "settings.proxy.off")
                             ComboBox.onSelectedItemChanged (fun o ->
                                 match o with
-                                | :? string as s ->
-                                    proxyMode.Set s
-                                    applyDownload ()
+                                | :? string as label ->
+                                    let mode =
+                                        if label = t "settings.proxy.system" then "system"
+                                        elif label = t "settings.proxy.custom" then "custom"
+                                        else "off"
+                                    if mode <> proxyMode.Current then
+                                        proxyMode.Set mode
+                                        applyDownload ()
                                 | _ -> ())
                         ]
                         TextBox.create [
                             TextBox.watermark "http://host:port"
                             TextBox.text proxyUrl.Current
+                            TextBox.isEnabled (proxyMode.Current = "custom")
                             TextBox.onTextChanged (fun s ->
                                 proxyUrl.Set s
                                 debounce applyDownload)
@@ -315,17 +335,31 @@ let view () =
                             TextBlock.text (t "settings.logging")
                             TextBlock.fontSize 18.0
                             TextBlock.fontWeight FontWeight.Bold
+                            TextBlock.margin (0.0, 16.0, 0.0, 0.0)
                         ]
                         TextBlock.create [ TextBlock.text (t "settings.logLevel") ]
+                        let logLevels =
+                            [ "Verbose", "settings.logLevel.verbose"
+                              "Debug", "settings.logLevel.debug"
+                              "Information", "settings.logLevel.info"
+                              "Warning", "settings.logLevel.warning"
+                              "Error", "settings.logLevel.error"
+                              "Fatal", "settings.logLevel.fatal" ]
                         ComboBox.create [
-                            ComboBox.dataItems
-                                [ "Verbose"; "Debug"; "Information"; "Warning"; "Error"; "Fatal" ]
-                            ComboBox.selectedItem logLevel.Current
+                            ComboBox.dataItems (logLevels |> List.map (fun (_, key) -> t key))
+                            ComboBox.selectedItem (
+                                logLevels
+                                |> List.tryFind (fun (value, _) -> value = logLevel.Current)
+                                |> Option.map (fun (_, key) -> t key)
+                                |> Option.defaultValue (t "settings.logLevel.info"))
                             ComboBox.onSelectedItemChanged (fun o ->
                                 match o with
-                                | :? string as s ->
-                                    logLevel.Set s
-                                    applyLog ()
+                                | :? string as label ->
+                                    match logLevels |> List.tryFind (fun (_, key) -> t key = label) with
+                                    | Some (value, _) when value <> logLevel.Current ->
+                                        logLevel.Set value
+                                        applyLog ()
+                                    | _ -> ()
                                 | _ -> ())
                         ]
                         TextBlock.create [ TextBlock.text (t "settings.logPath") ]

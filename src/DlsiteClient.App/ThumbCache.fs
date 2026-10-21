@@ -9,6 +9,7 @@ open System.Threading.Tasks
 open Avalonia.Media
 open Avalonia.Media.Imaging
 open Avalonia.Controls
+open Avalonia.Input
 open Avalonia.Layout
 open Avalonia.FuncUI.DSL
 open Avalonia.FuncUI.Types
@@ -70,6 +71,10 @@ let private download (url: string) =
         notify ()
     }
 
+/// Drop a cached failure so the next <see cref="request"/> fetches again.
+let invalidate (url: string) =
+    if not (String.IsNullOrWhiteSpace url) then cache.TryRemove url |> ignore
+
 /// Request a thumb; starts background fetch at most once. Safe on UI thread.
 let request (url: string) : unit =
     if String.IsNullOrWhiteSpace url then ()
@@ -119,5 +124,15 @@ let thumbView (url: string) (w: float) (h: float) : IView =
             Border.height h
             Border.background "#F3F4F6"
             Border.cornerRadius 4.0
+            Border.onPointerPressed (fun e ->
+                e.Handled <- true
+                invalidate url)
+            Border.child (
+                TextBlock.create [
+                    TextBlock.text "!"
+                    TextBlock.foreground "#9CA3AF"
+                    TextBlock.horizontalAlignment HorizontalAlignment.Center
+                    TextBlock.verticalAlignment VerticalAlignment.Center
+                ])
         ]
         :> IView

@@ -136,13 +136,13 @@ let view () =
                                 StackPanel.children [
                                     TextBlock.create [
                                         TextBlock.text (t "auth.sessionExpired")
-                                        TextBlock.foreground "#E65100"
+                                        TextBlock.foreground "#BF360C"
                                         TextBlock.fontWeight FontWeight.SemiBold
                                         TextBlock.textWrapping TextWrapping.Wrap
                                     ]
                                     TextBlock.create [
                                         TextBlock.text (t "auth.queuePaused")
-                                        TextBlock.foreground "#BF360C"
+                                        TextBlock.foreground "#8D2B0B"
                                         TextBlock.fontSize 12.0
                                         TextBlock.opacity 0.85
                                     ]

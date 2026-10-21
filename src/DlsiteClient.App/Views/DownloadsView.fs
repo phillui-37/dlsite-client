@@ -22,6 +22,21 @@ let private confirmRedownload (svc: AppServices) (workno: string) (bump: unit ->
         svc.Downloads.RequestRedownload workno
         bump ()
 
+/// Localized label for an internal job state; falls back to the raw name.
+let private jobStateLabel (state: DownloadJobState) =
+    let key =
+        match state with
+        | DownloadJobState.Queued -> "downloads.state.queued"
+        | DownloadJobState.Downloading -> "downloads.state.downloading"
+        | DownloadJobState.Paused -> "downloads.state.paused"
+        | DownloadJobState.Extracting -> "downloads.state.extracting"
+        | DownloadJobState.Completed -> "downloads.state.completed"
+        | DownloadJobState.Failed -> "downloads.state.failed"
+        | DownloadJobState.CorruptArchive -> "downloads.state.corruptArchive"
+        | _ -> ""
+    let label = if key = "" then "" else t key
+    if label = key then state.ToString() else label
+
 let private jobRow
     (svc: AppServices)
     (j: DownloadJob)
@@ -88,34 +103,46 @@ let private jobRow
                 ]
             ]
             StackPanel.create [
+                StackPanel.margin (0.0, 0.0, 8.0, 0.0)
                 StackPanel.clipToBounds true
+                StackPanel.spacing 3.0
                 StackPanel.children [
-                    TextBlock.create [ TextBlock.text j.WorkName; TextBlock.fontSize 16.0 ]
+                    TextBlock.create [
+                        TextBlock.textTrimming TextTrimming.CharacterEllipsis
+                        TextBlock.text j.WorkName
+                        TextBlock.fontSize 14.0
+                        TextBlock.fontWeight FontWeight.Medium
+                    ]
                     ProgressBar.create [
                         ProgressBar.minimum 0.0
                         ProgressBar.maximum 100.0
                         ProgressBar.value j.ProgressPercent
-                        ProgressBar.height 6.0
+                        ProgressBar.height 4.0
                     ]
                     TextBlock.create [
                         TextBlock.textTrimming TextTrimming.CharacterEllipsis
                         TextBlock.text (
                             let statusLabel =
                                 match j.State with
-                                | DownloadJobState.CorruptArchive -> t "downloads.corruptArchive"
+                                | DownloadJobState.CorruptArchive -> t "downloads.state.corruptArchive"
                                 | DownloadJobState.Failed when cached -> t "downloads.extractFailed"
-                                | _ -> j.State.ToString()
-                            let err =
-                                if String.IsNullOrEmpty j.ErrorMessage then ""
-                                else " - " + j.ErrorMessage
-                            fmt6 "{0:0.00}%  {1}  {2} / {3}  [{4}]{5}"
+                                | _ -> jobStateLabel j.State
+                            fmt5 "{0:0}%  {1}  {2} / {3}  {4}"
                                 j.ProgressPercent
                                 (fileName j.CurrentFileName)
                                 (sizePlain j.BytesDownloaded)
                                 (sizePlain j.BytesTotal)
-                                statusLabel
-                                err)
+                                statusLabel)
+                        TextBlock.foreground "#607087"
+                        TextBlock.fontSize 12.0
                     ]
+                    if not (String.IsNullOrEmpty j.ErrorMessage) then
+                        TextBlock.create [
+                            TextBlock.text j.ErrorMessage
+                            TextBlock.textWrapping TextWrapping.Wrap
+                            TextBlock.foreground "#B3261E"
+                            TextBlock.fontSize 12.0
+                        ]
                 ]
             ]
         ]
@@ -140,18 +167,23 @@ let view () =
         let done' = svc.Downloads.Completed
         let bump () = tick.Set(tick.Current + 1)
 
+        let emptyQueue =
+            active.Count = 0 && upNext.Count = 0 && done'.Count = 0
         DockPanel.create [
             DockPanel.children [
                 Border.create [
                     DockPanel.dock Dock.Top
                     Border.background "#FFFFFF"
+                    Border.borderBrush "#DFE6EF"
+                    Border.borderThickness (0.0, 0.0, 0.0, 1.0)
                     Border.padding 20.0
                     Border.child (
-                        StackPanel.create [
-                            StackPanel.children [
+                        DockPanel.create [
+                            DockPanel.children [
                                 Button.create [
+                                    DockPanel.dock Dock.Right
                                     Button.content (t "downloads.resumeAll")
-                                    Button.horizontalAlignment HorizontalAlignment.Right
+                                    Button.verticalAlignment VerticalAlignment.Center
                                     Button.isEnabled (not resuming.Current &&
                                         ((upNext |> Seq.exists (fun j -> j.State = DownloadJobState.Paused)) ||
                                          (done' |> Seq.exists (fun j -> j.State = DownloadJobState.Failed))))
@@ -162,24 +194,31 @@ let view () =
                                             (fun () -> resuming.Set false; bump ())
                                             (fun _ -> resuming.Set false; bump ()))
                                 ]
-                                TextBlock.create [
-                                    TextBlock.text (t "downloads.active")
-                                    TextBlock.fontSize 22.0
-                                    TextBlock.fontWeight FontWeight.Bold
-                                ]
-                                TextBlock.create [
-                                    TextBlock.text (
-                                        fmt6 "{0} {1}  {2} {3}  {4} {5}"
-                                            (sizeBps svc.Downloads.CurrentSpeedBps) (t "downloads.speed")
-                                            (sizeBps svc.Downloads.MaxSpeedBps) (t "downloads.maxSpeed")
-                                            (sizePlain svc.Downloads.SessionBytes) (t "downloads.total"))
-                                ]
-                                if svc.Downloads.IsPausedForAuth || svc.Auth.NeedsRelogin then
-                                    TextBlock.create [
-                                        TextBlock.text (t "auth.queuePaused")
-                                        TextBlock.foreground "#E65100"
-                                        TextBlock.margin (0.0, 4.0, 0.0, 0.0)
+                                StackPanel.create [
+                                    StackPanel.spacing 2.0
+                                    StackPanel.children [
+                                        TextBlock.create [
+                                            TextBlock.text (t "downloads.active")
+                                            TextBlock.fontSize 22.0
+                                            TextBlock.fontWeight FontWeight.Bold
+                                        ]
+                                        TextBlock.create [
+                                            TextBlock.text (
+                                                fmt4 "{0}  {1}  {2} {3}"
+                                                    (sizeBps svc.Downloads.CurrentSpeedBps)
+                                                    (sizeBps svc.Downloads.MaxSpeedBps)
+                                                    (sizePlain svc.Downloads.SessionBytes) (t "downloads.total"))
+                                            TextBlock.foreground "#607087"
+                                            TextBlock.fontSize 12.0
+                                        ]
+                                        if svc.Downloads.IsPausedForAuth || svc.Auth.NeedsRelogin then
+                                            TextBlock.create [
+                                                TextBlock.text (t "auth.queuePaused")
+                                                TextBlock.foreground "#B3261E"
+                                                TextBlock.margin (0.0, 4.0, 0.0, 0.0)
+                                            ]
                                     ]
+                                ]
                             ]
                         ])
                 ]
@@ -188,35 +227,51 @@ let view () =
                         StackPanel.create [
                             StackPanel.children (
                                 [ TextBlock.create [
-                                    TextBlock.margin 8.0
+                                    TextBlock.margin (12.0, 16.0, 12.0, 4.0)
                                     TextBlock.text (fmt2 "{0} ({1})" (t "downloads.active") active.Count)
                                     TextBlock.fontWeight FontWeight.SemiBold
+                                    TextBlock.fontSize 13.0
+                                    TextBlock.foreground "#607087"
                                   ]
                                   :> IView ]
                                 @ (active |> Seq.map (fun j -> jobRow svc j "active" bump :> IView) |> Seq.toList)
                                 @ [ TextBlock.create [
-                                      TextBlock.margin 8.0
+                                      TextBlock.margin (12.0, 16.0, 12.0, 4.0)
                                       TextBlock.text (fmt2 "{0} ({1})" (t "downloads.upNext") upNext.Count)
                                       TextBlock.fontWeight FontWeight.SemiBold
+                                      TextBlock.fontSize 13.0
+                                      TextBlock.foreground "#607087"
                                     ]
                                     :> IView ]
                                 @ (upNext |> Seq.map (fun j -> jobRow svc j "upNext" bump :> IView) |> Seq.toList)
                                 @ [ DockPanel.create [
-                                      DockPanel.margin 8.0
+                                      DockPanel.margin (12.0, 16.0, 12.0, 4.0)
                                       DockPanel.children [
                                           Button.create [
                                               DockPanel.dock Dock.Right
+                                              Button.classes [ "outline" ]
                                               Button.content (t "downloads.clearAll")
                                               Button.onClick (fun _ -> svc.Downloads.ClearCompleted(); bump ())
                                           ]
                                           TextBlock.create [
                                               TextBlock.text (fmt2 "{0} ({1})" (t "downloads.completed") done'.Count)
                                               TextBlock.fontWeight FontWeight.SemiBold
+                                              TextBlock.fontSize 13.0
+                                              TextBlock.foreground "#607087"
+                                              TextBlock.verticalAlignment VerticalAlignment.Center
                                           ]
                                       ]
                                     ]
                                     :> IView ]
-                                @ (done' |> Seq.map (fun j -> jobRow svc j "done" bump :> IView) |> Seq.toList))
+                                @ (done' |> Seq.map (fun j -> jobRow svc j "done" bump :> IView) |> Seq.toList)
+                                @ (if emptyQueue then
+                                       [ TextBlock.create [
+                                           TextBlock.text (t "downloads.empty")
+                                           TextBlock.margin (32.0, 48.0, 32.0, 0.0)
+                                           TextBlock.horizontalAlignment HorizontalAlignment.Center
+                                           TextBlock.foreground "#607087"
+                                         ] :> IView ]
+                                   else []))
                         ])
                 ]
             ]
