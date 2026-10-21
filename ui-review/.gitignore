@@ -1,0 +1,7 @@
+*
+!.gitignore
+!*.md
+!before/
+!after/
+before/*.png
+after/*.png
