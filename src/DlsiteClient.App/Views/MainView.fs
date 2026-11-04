@@ -76,20 +76,40 @@ let view () =
                 Border.borderBrush "#24364D"
                 Border.borderThickness (0.0, 0.0, 0.0, 1.0)
                 Border.child (
-                    StackPanel.create [
-                        StackPanel.spacing 8.0
-                        StackPanel.margin (12.0, 24.0)
-                        StackPanel.children [
-                            TextBlock.create [
-                                TextBlock.text (t "app.title")
-                                TextBlock.foreground "#FFFFFF"
-                                TextBlock.fontSize 18.0
-                                TextBlock.fontWeight FontWeight.Bold
-                                TextBlock.margin (12.0, 0.0, 0.0, 24.0)
+                    DockPanel.create [
+                        DockPanel.children [
+                            StackPanel.create [
+                                DockPanel.dock Dock.Top
+                                StackPanel.spacing 8.0
+                                StackPanel.margin (12.0, 20.0)
+                                StackPanel.children [
+                                    StackPanel.create [
+                                        StackPanel.orientation Orientation.Horizontal
+                                        StackPanel.spacing 10.0
+                                        StackPanel.margin (12.0, 0.0, 0.0, 26.0)
+                                        StackPanel.children [
+                                            Border.create [
+                                                Border.width 10.0
+                                                Border.height 20.0
+                                                Border.cornerRadius 3.0
+                                                Border.background "#4FC3F7"
+                                                Border.verticalAlignment VerticalAlignment.Center
+                                            ]
+                                            TextBlock.create [
+                                                TextBlock.text (t "app.title")
+                                                TextBlock.foreground "#FFFFFF"
+                                                TextBlock.fontSize 17.0
+                                                TextBlock.fontWeight FontWeight.Bold
+                                                TextBlock.verticalAlignment VerticalAlignment.Center
+                                            ]
+                                        ]
+                                    ]
+                                    tab Page.Library "nav.library"
+                                    tab Page.Downloads "nav.downloads"
+                                    tab Page.Settings "nav.settings"
+                                ]
                             ]
-                            tab Page.Library "nav.library"
-                            tab Page.Downloads "nav.downloads"
-                            tab Page.Settings "nav.settings"
+                            Border.create [ Border.height 1.0 ]
                         ]
                     ])
             ]

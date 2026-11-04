@@ -432,7 +432,7 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                   if colVisible vis "salesDate" then
                       cellText W_SALES (orDash w.SalesDate) true
                   if colVisible vis "downloaded" then
-                      cellText W_DL (if w.IsDownloaded then "OK" else "-") true
+                      cellText W_DL (if w.IsDownloaded then t "library.col.downloaded.yes" else "-") true
                   if colVisible vis "extractSize" then
                       cellText W_SIZE (sizeBytes w.ContentsFileSize) true
                   if colVisible vis "update" then
@@ -453,8 +453,8 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                 Border.background bg
                 Border.borderBrush colorOutline
                 Border.borderThickness (0.0, 0.0, 0.0, 1.0)
-                Border.padding (8.0, 6.0)
-                Border.minHeight 56.0
+                Border.padding (8.0, 5.0)
+                Border.minHeight 52.0
                 Border.contextMenu (contextMenu svc w onGoDownloads (fun () -> onOpenDetail w.Workno) bump)
                 Border.onPointerPressed (fun e ->
                     if e.ClickCount >= 2 && e.GetCurrentPoint(null).Properties.IsLeftButtonPressed then
@@ -495,10 +495,17 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                         onOpenDetail w.Workno)
                 Border.child (
                     StackPanel.create [
-                        StackPanel.spacing 6.0
+                        StackPanel.spacing 4.0
                         StackPanel.children [
-                            rowSelect w
-                            updateAction w
+                            DockPanel.create [
+                                DockPanel.children [
+                                    Border.create [
+                                        DockPanel.dock Dock.Right
+                                        Border.child (updateAction w)
+                                    ]
+                                    rowSelect w
+                                ]
+                            ]
                             thumbView (thumbUrl w) 140.0 140.0
                             TextBlock.create [
                                 TextBlock.text (titleWithDlc w)
@@ -570,7 +577,7 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                                                     w.RatingText
                                                     orDash w.RegistDate
                                                     sizeBytes w.ContentsFileSize
-                                                    (if w.IsDownloaded then "OK" else "-")
+                                                    (if w.IsDownloaded then t "library.col.downloaded.yes" else "-")
                                                 |]))
                                         TextBlock.foreground colorOnSurfaceVariant
                                         TextBlock.fontSize 12.0
@@ -614,20 +621,56 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                 ] :> IView
             if isOpen then header :: body else [ header ]
 
-        let pager : IView =
+        let modeChip (label: string) (active: bool) (onClick: unit -> unit) : IView =
+            Button.create [
+                Button.classes [ "flat" ]
+                Button.cornerRadius 6.0
+                Button.padding (12.0, 5.0)
+                Button.minHeight 32.0
+                Button.background (if active then colorPrimaryContainer else "Transparent")
+                Button.foreground (if active then colorPrimary else "#455A64")
+                Button.borderThickness 0.0
+                Button.content label
+                Button.fontSize 13.0
+                Button.fontWeight (if active then FontWeight.SemiBold else FontWeight.Normal)
+                Button.onClick (fun _ -> onClick ())
+            ]
+            :> IView
+
+        let modeGroup : IView =
             Border.create [
-                Border.padding (4.0, 8.0)
+                Border.background colorSurface
+                Border.borderBrush colorOutline
+                Border.borderThickness 1.0
+                Border.cornerRadius 8.0
+                Border.padding 2.0
+                Border.verticalAlignment VerticalAlignment.Center
                 Border.child (
                     StackPanel.create [
                         StackPanel.orientation Orientation.Horizontal
-                        StackPanel.spacing 10.0
                         StackPanel.children [
-                            TextBlock.create [
-                                TextBlock.text (fmt1 (t "library.count") total)
-                                TextBlock.verticalAlignment VerticalAlignment.Center
-                                TextBlock.foreground colorOnSurfaceVariant
-                                TextBlock.fontSize 13.0
-                            ]
+                            modeChip (t "library.mode.list") (mode.Current = LibraryViewMode.List) (fun () ->
+                                setMode LibraryViewMode.List)
+                            modeChip (t "library.mode.grid") (mode.Current = LibraryViewMode.Grid) (fun () ->
+                                setMode LibraryViewMode.Grid)
+                            modeChip (t "library.mode.hybrid") (mode.Current = LibraryViewMode.Hybrid) (fun () ->
+                                setMode LibraryViewMode.Hybrid)
+                        ]
+                    ])
+            ]
+            :> IView
+
+        /// Page footer: page-size choice plus pager, right-aligned under the table.
+        let pagerRow : IView =
+            DockPanel.create [
+                DockPanel.margin (0.0, 10.0, 0.0, 0.0)
+                DockPanel.children [
+                    StackPanel.create [
+                        DockPanel.dock Dock.Right
+                        StackPanel.orientation Orientation.Horizontal
+                        StackPanel.spacing 10.0
+                        StackPanel.verticalAlignment VerticalAlignment.Center
+                        StackPanel.children [
                             TextBlock.create [
                                 TextBlock.text (t "library.pageSize")
                                 TextBlock.verticalAlignment VerticalAlignment.Center
@@ -661,7 +704,9 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                                 Button.onClick (fun _ -> page.Set(pageIdx + 1); bump ())
                             ]
                         ]
-                    ])
+                    ]
+                    TextBlock.create [ TextBlock.text "" ]
+                ]
             ]
             :> IView
 
@@ -672,11 +717,33 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                 ]
                 :> IView
             elif pageWorks.IsEmpty then
-                TextBlock.create [
-                    TextBlock.text (t "library.empty")
-                    TextBlock.margin 32.0
-                    TextBlock.horizontalAlignment HorizontalAlignment.Center
-                    TextBlock.foreground colorOnSurfaceVariant
+                StackPanel.create [
+                    StackPanel.margin (0.0, 48.0, 0.0, 48.0)
+                    StackPanel.horizontalAlignment HorizontalAlignment.Center
+                    StackPanel.spacing 6.0
+                    StackPanel.children [
+                        Border.create [
+                            Border.width 40.0
+                            Border.height 40.0
+                            Border.cornerRadius 20.0
+                            Border.background colorSurfaceVariant
+                            Border.horizontalAlignment HorizontalAlignment.Center
+                            Border.child (
+                                TextBlock.create [
+                                    TextBlock.text "—"
+                                    TextBlock.fontSize 18.0
+                                    TextBlock.foreground colorOnSurfaceVariant
+                                    TextBlock.horizontalAlignment HorizontalAlignment.Center
+                                    TextBlock.verticalAlignment VerticalAlignment.Center
+                                ])
+                        ]
+                        TextBlock.create [
+                            TextBlock.text (t "library.empty")
+                            TextBlock.horizontalAlignment HorizontalAlignment.Center
+                            TextBlock.foreground colorOnSurfaceVariant
+                            TextBlock.fontSize 14.0
+                        ]
+                    ]
                 ]
                 :> IView
             else
@@ -764,28 +831,45 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
 
         let toolbarChildren : IView list =
             [ DockPanel.create [
-                  DockPanel.margin (0.0, 0.0, 0.0, 8.0)
+                  DockPanel.margin (0.0, 0.0, 0.0, 10.0)
                   DockPanel.children [
-                      TextBlock.create [
-                          DockPanel.dock Dock.Left
-                          TextBlock.text (t "nav.library")
-                          TextBlock.fontSize 26.0
-                          TextBlock.fontWeight FontWeight.Bold
-                          TextBlock.foreground "#142337"
-                          TextBlock.verticalAlignment VerticalAlignment.Center
-                          TextBlock.margin (0.0, 0.0, 32.0, 0.0)
+                      StackPanel.create [
+                          DockPanel.dock Dock.Right
+                          StackPanel.orientation Orientation.Horizontal
+                          StackPanel.spacing 8.0
+                          StackPanel.verticalAlignment VerticalAlignment.Center
+                          StackPanel.children [
+                              modeGroup
+                              TextBox.create [
+                                  TextBox.width 300.0
+                                  TextBox.minHeight 36.0
+                                  TextBox.watermark (t "library.search")
+                                  TextBox.text search.Current
+                                  TextBox.onTextChanged (fun s -> search.Set s; page.Set 0; bump ())
+                              ]
+                          ]
                       ]
-                      TextBox.create [
-                          TextBox.minHeight 40.0
-                          TextBox.watermark (t "library.search")
-                          TextBox.text search.Current
-                          TextBox.onTextChanged (fun s -> search.Set s; page.Set 0; bump ())
+                      StackPanel.create [
+                          StackPanel.verticalAlignment VerticalAlignment.Center
+                          StackPanel.spacing 2.0
+                          StackPanel.children [
+                              TextBlock.create [
+                                  TextBlock.text (t "nav.library")
+                                  TextBlock.fontSize 20.0
+                                  TextBlock.fontWeight FontWeight.SemiBold
+                                  TextBlock.foreground "#142337"
+                              ]
+                              TextBlock.create [
+                                  TextBlock.text (fmt1 (t "library.count") total)
+                                  TextBlock.fontSize 12.0
+                                  TextBlock.foreground colorOnSurfaceVariant
+                              ]
+                          ]
                       ]
                   ]
               ] :> IView
               StackPanel.create [
                   StackPanel.orientation Orientation.Horizontal
-                  StackPanel.margin (0.0, 4.0, 0.0, 0.0)
                   StackPanel.children (
                       [ MediaFilter.All, "library.filter.all"
                         MediaFilter.Games, "library.filter.games"
@@ -798,49 +882,55 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                               media.Set f0; page.Set 0; bump ())))
               ]
               :> IView
-              StackPanel.create [
-                  StackPanel.orientation Orientation.Horizontal
-                  StackPanel.spacing 12.0
-                  StackPanel.margin (0.0, 4.0, 0.0, 0.0)
-                  StackPanel.children [
-                      CheckBox.create [
-                          CheckBox.content (t "library.filter.favorites")
-                          CheckBox.isChecked favOnly.Current
-                          CheckBox.onIsCheckedChanged (fun e ->
-                              match e.Source with
-                              | :? CheckBox as cb ->
-                                  favOnly.Set (cb.IsChecked = Nullable true); page.Set 0; bump ()
-                              | _ -> ())
+              DockPanel.create [
+                  DockPanel.margin (0.0, 8.0, 0.0, 0.0)
+                  DockPanel.children [
+                      Border.create [
+                          DockPanel.dock Dock.Right
+                          Border.verticalAlignment VerticalAlignment.Center
+                          Border.child (
+                              filterChip (t "library.filters") expandAdvanced.Current (fun () ->
+                                  expandAdvanced.Set(not expandAdvanced.Current)))
                       ]
-                      CheckBox.create [
-                          CheckBox.content (t "library.filter.hidden")
-                          CheckBox.isChecked showHidden.Current
-                          CheckBox.onIsCheckedChanged (fun e ->
-                              match e.Source with
-                              | :? CheckBox as cb ->
-                                  showHidden.Set (cb.IsChecked = Nullable true); page.Set 0; bump ()
-                              | _ -> ())
+                      StackPanel.create [
+                          StackPanel.orientation Orientation.Horizontal
+                          StackPanel.spacing 12.0
+                          StackPanel.verticalAlignment VerticalAlignment.Center
+                          StackPanel.children [
+                              CheckBox.create [
+                                  CheckBox.content (t "library.filter.favorites")
+                                  CheckBox.isChecked favOnly.Current
+                                  CheckBox.onIsCheckedChanged (fun e ->
+                                      match e.Source with
+                                      | :? CheckBox as cb ->
+                                          favOnly.Set (cb.IsChecked = Nullable true); page.Set 0; bump ()
+                                      | _ -> ())
+                              ]
+                              CheckBox.create [
+                                  CheckBox.content (t "library.filter.hidden")
+                                  CheckBox.isChecked showHidden.Current
+                                  CheckBox.onIsCheckedChanged (fun e ->
+                                      match e.Source with
+                                      | :? CheckBox as cb ->
+                                          showHidden.Set (cb.IsChecked = Nullable true); page.Set 0; bump ()
+                                      | _ -> ())
+                              ]
+                              CheckBox.create [
+                                  CheckBox.content (t "library.filter.downloaded")
+                                  CheckBox.isChecked dlOnly.Current
+                                  CheckBox.onIsCheckedChanged (fun e ->
+                                      match e.Source with
+                                      | :? CheckBox as cb ->
+                                          dlOnly.Set (cb.IsChecked = Nullable true); page.Set 0; bump ()
+                                      | _ -> ())
+                              ]
+                              CheckBox.create [
+                                  CheckBox.content (t "library.filter.updates")
+                                  CheckBox.isChecked updatesOnly.Current
+                                  CheckBox.onClick (fun _ -> updatesOnly.Set(not updatesOnly.Current); page.Set 0)
+                              ]
+                          ]
                       ]
-                      CheckBox.create [
-                          CheckBox.content (t "library.filter.downloaded")
-                          CheckBox.isChecked dlOnly.Current
-                          CheckBox.onIsCheckedChanged (fun e ->
-                              match e.Source with
-                              | :? CheckBox as cb ->
-                                  dlOnly.Set (cb.IsChecked = Nullable true); page.Set 0; bump ()
-                              | _ -> ())
-                      ]
-                      CheckBox.create [
-                          CheckBox.content (t "library.filter.updates")
-                          CheckBox.isChecked updatesOnly.Current
-                          CheckBox.onClick (fun _ -> updatesOnly.Set(not updatesOnly.Current); page.Set 0)
-                      ]
-                      filterChip (t "library.mode.list") (mode.Current = LibraryViewMode.List) (fun () ->
-                          setMode LibraryViewMode.List)
-                      filterChip (t "library.mode.grid") (mode.Current = LibraryViewMode.Grid) (fun () ->
-                          setMode LibraryViewMode.Grid)
-                      filterChip (t "library.mode.hybrid") (mode.Current = LibraryViewMode.Hybrid) (fun () ->
-                          setMode LibraryViewMode.Hybrid)
                   ]
               ]
               :> IView ]
@@ -958,16 +1048,7 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                                     ]
                                     :> IView ]
             ))
-            @ [ DockPanel.create [
-                    DockPanel.children [
-                        Border.create [
-                            DockPanel.dock Dock.Right
-                            Border.verticalAlignment VerticalAlignment.Center
-                            Border.child (filterChip (t "library.filters") expandAdvanced.Current (fun () -> expandAdvanced.Set(not expandAdvanced.Current)))
-                        ]
-                        ContentControl.create [ ContentControl.content pager ]
-                    ]
-                ] :> IView ]
+            @ [ pagerRow ]
 
         DockPanel.create [
             DockPanel.background colorSurfaceVariant
@@ -977,10 +1058,10 @@ let view (onOpenDetail: string -> unit) (onGoDownloads: unit -> unit) =
                     Border.background colorSurface
                     Border.borderBrush colorOutline
                     Border.borderThickness (0.0, 0.0, 0.0, 1.0)
-                    Border.padding (20.0, 16.0)
+                    Border.padding (20.0, 14.0)
                     Border.child (
                         StackPanel.create [
-                            StackPanel.spacing 4.0
+                            StackPanel.spacing 6.0
                             StackPanel.children toolbarChildren
                         ])
                 ]

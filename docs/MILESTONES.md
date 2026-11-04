@@ -57,3 +57,32 @@ Validation: 48 Windows core checks and 33 headless UI checks pass. Public produc
 GitHub Actions now runs on the Windows PC and its local SteamOS VM (Ubuntu 24.04 build userspace). Run 38945000421 passed 48 Windows core checks, 60 Linux core checks, 33 headless UI checks per platform, Native AOT MSI publishing and MSI maintenance checks, AppImage packaging and bundled-runtime checks. CI exposed and fixed an early-exit Linux credential-helper pipe race; its forced large-input regression also passed three local runs. The VM command agent now uses a persistent service, and a full power-off/start check passed. Windows runner startup uses the current account's Startup folder.
 
 The fresh AppImage desktop check found a first-run empty-path defect when XDG directories did not exist. App-data and launch-lease paths now resolve without requiring existing directories. All 62 Linux checks pass. The fixed FUSE package shows library/settings and the native vivion ID login form at 1280 x 800 with a fresh user config root. No new credentials were entered.
+
+### Basic functionality verification and UI handoff — 2026-11-04
+
+Fixed the OAuth callback validation gap: the generated authorize-state is now retained through WebAuthenticationBroker and must match the callback state before the token is exchanged. The callback parser also rejects a callback URI whose scheme, host, port or path differs from the configured redirect. Regression coverage checks matching, mismatched and missing state, and a wrong callback path.
+
+Fresh local validation: Windows `net10.0-windows` Release build passed with `PublishAot=false` (managed dev build); Linux `net10.0` Release build passed. Core regression suite passed 53 checks and headless library UI suite passed 33 checks. Builds report existing compiler/package warnings; no errors. No live account login, purchased work download, or commercial game launch was performed. One auth verification gap remains: `docs/API.md` and ADR-013 specify a different redirect path from `NestOidc` and the architecture flow. The state and callback-origin/path checks are covered locally, but the actual broker redirect must be confirmed against the currently registered Nest flow before claiming end-to-end login verification.
+
+UI handoff for the next design pass (source review; no rendered-screen review in this verification):
+- Main shell: fixed 176 px navigation rail, with Library, Downloads and Settings inside the shared content area; session-expiry banner appears above page content.
+- Library: many filters, search, mode/sort controls and batch actions share one compact header; list, grid and hybrid modes are already implemented. Revisit hierarchy and density while preserving the working filter, paging and selection behavior.
+- Downloads: Active, Up Next and Completed are stacked vertically in one scrolling page; Resume all is in the heading area. Review queue hierarchy and per-row action discoverability.
+- Settings: a long single scrolling form. The manual SID fallback is visible in the account section alongside normal login/logout/sync and is a strong candidate to demote or remove from the primary flow.
+- Detail: a work information page with launch state, executable choice and folder action. Review information grouping and launch-action prominence.
+
+Keep this pass UI-only; functional state and flows above are verified and should remain intact. Physical Steam Deck/Gaming Mode and live Nest account flows remain unverified in this run.
+
+### UI finalization pass — 2026-11-04
+
+Took ownership of the pending OIDC finalization and completed the UI handoff pass above.
+
+- Verified the in-flight OIDC state fix end to end: the authorize-state is retained through WebAuthenticationBroker and the callback must match it plus the exact redirect scheme/host/port/path before any token exchange. Regression coverage: matching, mismatched and missing state, wrong redirect path, authorize URI exposure, and no session published before credential storage (6 OIDC checks).
+- Repaired a mojibake'd doc comment that the in-flight edit introduced in `NestOidc.cs`.
+- Library: header re-layered into title+count, search with a segmented list/grid/hybrid switch, media chips, then quick filters with the advanced toggle inline; paging (page size + prev/next) is a right-aligned footer. Downloaded cells and hybrid meta use the localized label (no hardcoded "OK"). Tighter rows and a centered empty state.
+- Downloads: page heading with speed/session stats and Resume all at top right; Active / Up Next / Completed are separate cards with counts, empty states, per-row state dots and separated error text.
+- Settings: section cards (account / environment / download / logging / Linux) with two-column rows; language and proxy combos show localized labels; the manual SID fallback is collapsed behind a debug disclosure with masked input; the proxy URL field enables only in custom mode.
+- Detail: header card (thumb, title, maker, type/rating pills), prominent action row with a filled Play button, info card (adds sales date, localized work type, tag chips) and a launch-settings card grouping the locale flag, saved exe, multi-exe picker and status.
+- Shell: nav rail brand block with accent mark; navigation behavior and labels unchanged.
+- New strings only in `locales/ja.json` + `locales/zh-TW.json`, including download-state labels (extracting, queued) so raw enum names never render.
+- Validation (Windows host, managed Release builds for both TFMs, 0 errors): core regression 53 checks passed; headless library UI suite fully green; ten headless-render screenshots (ja + zh-TW; list/grid/hybrid/advanced/downloads/settings/SID-open/detail) captured from the real views with synthetic data in `.local-notes/shots-2026-11-04`. No live account, purchase, download or commercial game launch in this pass.

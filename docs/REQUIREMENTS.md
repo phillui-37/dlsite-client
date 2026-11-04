@@ -159,3 +159,11 @@ Resolve the launch-lease directory before XDG_DATA_HOME exists as well. A first 
 ## Personal build-host installer checks
 
 MSI tests must not upgrade or remove an installed copy on this PC. Check all related products by UpgradeCode before installing. Manual tests refuse an occupied host; CI may explicitly skip installer execution while still building the release package, with a visible notice.
+
+## UI finalization pass — 2026-11-04
+
+- Library header is layered: title + count, search with a segmented list/grid/hybrid switch, media chips, then quick filters with the advanced toggle inline; paging controls sit right-aligned under the toolbar. Filter, sort, selection and paging behavior is unchanged.
+- Downloads shows a page heading with session stats and Resume all; Active / Up Next / Completed are separate cards with counts and empty states. Job rows show a state dot, separated error text and per-state actions.
+- Settings uses section cards with two-column rows. The manual SID fallback stays collapsed behind a debug disclosure and masks its input; language and proxy choices render localized labels.
+- Detail groups work data into header, actions, info and launch-settings cards; the launch action is visually primary. Work-type and downloaded cells always render localized labels.
+- Download job state names (extracting, queued) come from locales, not enum names.
