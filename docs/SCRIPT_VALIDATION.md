@@ -14,3 +14,13 @@ I checked all eight files in `scripts/`. The contract suite is [script_contract_
 | `start-linux-runner.sh` | **Contract checks passed** | Git Bash `-n` passed. Checked lock-before-chroot and guarded-mount source contracts; did not mount a device or start a CI worker. |
 
 The UI checks and output frames are recorded in [UIUX.md](UIUX.md). MSI installation, Linux AppImage packaging and launching a live CI runner remain outside the evidence gathered here.
+
+## Merged main checkout — 2026-11-07
+
+These follow-up results are from `D:\projects\dlsite-client` after merging the worktree and retaining main's Settings, Detail, Downloads and shell layouts.
+
+- Release app build for both target frameworks: passed. Core regression suite: **63 checks passed**.
+- Headless UI suite: **102 checks passed**, including the 21 restored local Downloads assertions. Render-enabled run produced 28 Avalonia/Skia frames from synthetic offline data in ja and zh-TW.
+- Script contract suite: **9 checks passed**, covering the exact eight-script inventory and their guards/parser contracts.
+- An unoverridden main-checkout `publish-aot.ps1` run inherited `DOTNET_ROOT` and `MSBuildSDKsPath` from `dotnet-sdk-lts`, then completed Native AOT using its selected `dotnet-sdk`. The generated exe was 43,865,088 bytes. The 257-file pre-existing output bundle was restored after its file paths, sizes and SHA-256 hashes all matched the pre-run manifest. Existing nullability and FSharp.Core/Avalonia.FuncUI trim/AOT warnings remain.
+- This does not claim that all deployment scripts ran end to end. MSI publishing still requires WiX OSMF EULA acceptance; full Linux VM/AppImage and runner validation remain blocked by the saved VM's CPU mismatch. No license was accepted and no VM state was altered.
