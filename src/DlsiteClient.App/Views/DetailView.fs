@@ -14,10 +14,11 @@ open DlsiteClient.App.Services
 open DlsiteClient.App.Fmt
 open DlsiteClient.App.ThumbCache
 open DlsiteClient.App.UiAsync
+open DlsiteClient.App.Palette
 
-let private colorOutline = "#DFE6EF"
-let private colorOnSurfaceVariant = "#607087"
-let private colorPrimary = "#1976D2"
+let private colorOutline = Outline
+let private colorOnSurfaceVariant = InkMuted
+let private colorPrimary = Clay
 
 let private orDash (s: string) =
     if String.IsNullOrEmpty s then "-" else s
@@ -40,7 +41,7 @@ let private fileNameOrPath (p: string) =
 let private card (children: IView list) : IView =
     Border.create [
         Border.cornerRadius 8.0
-        Border.background "#FFFFFF"
+        Border.background Surface
         Border.borderBrush colorOutline
         Border.borderThickness 1.0
         Border.padding 16.0
@@ -57,7 +58,7 @@ let private cardTitle (key: string) : IView =
         TextBlock.text (t key)
         TextBlock.fontSize 16.0
         TextBlock.fontWeight FontWeight.SemiBold
-        TextBlock.foreground "#142337"
+        TextBlock.foreground Ink
     ]
     :> IView
 
@@ -191,7 +192,7 @@ let view (workno: string) (onBack: unit -> unit) =
                                         StackPanel.children [
                                             Border.create [
                                                 Border.cornerRadius 10.0
-                                                Border.background "#E3F2FD"
+                                                Border.background ClayContainer
                                                 Border.padding (10.0, 3.0)
                                                 Border.child (
                                                     TextBlock.create [
@@ -202,7 +203,7 @@ let view (workno: string) (onBack: unit -> unit) =
                                             ]
                                             Border.create [
                                                 Border.cornerRadius 10.0
-                                                Border.background "#F1F4F9"
+                                                Border.background SurfaceMuted
                                                 Border.padding (10.0, 3.0)
                                                 Border.child (
                                                     TextBlock.create [
@@ -222,10 +223,11 @@ let view (workno: string) (onBack: unit -> unit) =
             let actionButtons : IView list =
                 [ if w.IsDownloaded then
                       Button.create [
+                          Button.classes [ "primary" ]
                           Button.content (if launchState = GameLaunchState.Running then t "launcher.running" else t "detail.play")
                           Button.isEnabled (not starting && launchState <> GameLaunchState.Running)
                           Button.background colorPrimary
-                          Button.foreground "#FFFFFF"
+                          Button.foreground Surface
                           Button.fontWeight FontWeight.SemiBold
                           Button.minHeight 40.0
                           Button.cornerRadius 6.0
@@ -234,6 +236,7 @@ let view (workno: string) (onBack: unit -> unit) =
                               tick.Set(tick.Current + 1))
                       ]
                   Button.create [
+                      Button.classes (if w.IsDownloaded then [] else [ "primary" ])
                       Button.content (t "detail.download")
                       Button.minHeight 40.0
                       Button.onClick (fun _ -> svc.Downloads.Enqueue([ w ], false))
@@ -250,7 +253,6 @@ let view (workno: string) (onBack: unit -> unit) =
                           Button.content (t "launcher.changeExe")
                           Button.minHeight 40.0
                           Button.onClick (fun _ ->
-                              svc.Library.ClearSelectedExe w.Workno
                               let install =
                                   if isNull w.InstallPath then "" else w.InstallPath
                               run
@@ -260,6 +262,7 @@ let view (workno: string) (onBack: unit -> unit) =
                                       if exes.IsEmpty then
                                           status.Set (t "launcher.noExe")
                                       else
+                                          always.Set false
                                           exeChoice.Set(Some exes)
                                           selectedExe.Set(List.head exes)
                                           status.Set ""
@@ -294,6 +297,7 @@ let view (workno: string) (onBack: unit -> unit) =
 
             let actionBar : IView =
                 WrapPanel.create [
+                    WrapPanel.classes [ "actions" ]
                     WrapPanel.orientation Orientation.Horizontal
                     WrapPanel.children [
                         for b in actionButtons -> b :> IView
@@ -313,7 +317,7 @@ let view (workno: string) (onBack: unit -> unit) =
                         TextBlock.create [
                             TextBlock.text (
                                 fmt2 "{0} {1}" (t "library.dlcBadge") (orDash w.ParentWorkno))
-                            TextBlock.foreground Brushes.DarkOrange
+                            TextBlock.foreground Clay
                         ]
                     TextBlock.create [
                         TextBlock.text (t "detail.tags")
@@ -325,18 +329,25 @@ let view (workno: string) (onBack: unit -> unit) =
                             TextBlock.foreground colorOnSurfaceVariant
                         ]
                     else
-                        WrapPanel.create [
-                            WrapPanel.children (
-                                tags
-                                |> List.map (fun tag ->
-                                    Border.create [
-                                        Border.margin 2.0
-                                        Border.padding (8.0, 3.0)
-                                        Border.cornerRadius 10.0
-                                        Border.background "#E0F2FE"
-                                        Border.child (TextBlock.create [ TextBlock.text tag; TextBlock.fontSize 12.0 ])
-                                    ]
-                                    :> IView))
+                        ScrollViewer.create [
+                            ScrollViewer.name "detail-tags"
+                            ScrollViewer.maxHeight 120.0
+                            ScrollViewer.horizontalScrollBarVisibility Primitives.ScrollBarVisibility.Disabled
+                            ScrollViewer.content (
+                                WrapPanel.create [
+                                    WrapPanel.children (
+                                        tags
+                                        |> List.map (fun tag ->
+                                            Border.create [
+                                                Border.margin 2.0
+                                                Border.padding (8.0, 3.0)
+                                                Border.cornerRadius 10.0
+                                                Border.background MossContainer
+                                                Border.child (TextBlock.create [ TextBlock.text tag; TextBlock.fontSize 12.0 ])
+                                            ]
+                                            :> IView))
+                                ]
+                            )
                         ]
                 ]
 
@@ -364,12 +375,12 @@ let view (workno: string) (onBack: unit -> unit) =
                             StackPanel.orientation Orientation.Horizontal
                             StackPanel.spacing 8.0
                             StackPanel.children [
-                                ProgressBar.create [ ProgressBar.classes [ "circular" ]; ProgressBar.width 24.0; ProgressBar.height 24.0; ProgressBar.isIndeterminate true ]
+                                ProgressBar.create [ ProgressBar.width 64.0; ProgressBar.height 4.0; ProgressBar.verticalAlignment VerticalAlignment.Center; ProgressBar.isIndeterminate true ]
                                 TextBlock.create [ TextBlock.text (t "launcher.starting"); TextBlock.verticalAlignment VerticalAlignment.Center ]
                             ]
                         ]
                     if launchState = GameLaunchState.Failed then
-                        TextBlock.create [ TextBlock.text (t (svc.Launcher.GetLaunchError workno)); TextBlock.foreground Brushes.Red ]
+                        TextBlock.create [ TextBlock.text (t (svc.Launcher.GetLaunchError workno)); TextBlock.foreground Error ]
                     match exeChoice.Current with
                     | None -> TextBlock.create [ TextBlock.text "" ]
                     | Some exes ->
@@ -414,17 +425,16 @@ let view (workno: string) (onBack: unit -> unit) =
                         ]
                     TextBlock.create [
                         TextBlock.text status.Current
-                        TextBlock.foreground Brushes.Red
+                        TextBlock.foreground Error
                         TextBlock.textWrapping TextWrapping.Wrap
                     ]
                 ]
 
             DockPanel.create [
-                DockPanel.background "#F0F3F8"
+                DockPanel.background Paper
                 DockPanel.children [
                     Button.create [
                         DockPanel.dock Dock.Top
-                        Button.classes [ "flat" ]
                         Button.horizontalAlignment HorizontalAlignment.Left
                         Button.margin (12.0, 8.0)
                         Button.content (t "common.back")

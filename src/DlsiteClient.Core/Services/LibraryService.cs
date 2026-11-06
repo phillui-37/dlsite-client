@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
 using DlsiteClient.Core.Api;
@@ -19,8 +20,9 @@ public sealed class LibraryService
     private readonly Dictionary<string, string> _workTypeNames = new(StringComparer.OrdinalIgnoreCase);
     private bool _dlcFeatureEnabled;
     private bool _tagsFromProductJson;
-    private readonly SemaphoreSlim _tagGate = new(1, 1);
+    private readonly SemaphoreSlim _tagGate = new(4, 4);
     private readonly HashSet<string> _tagAttempts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, (string? Json, HashSet<string> Tags)> _parsedTags = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _cacheGate = new();
 
     public LibraryService(
@@ -44,7 +46,11 @@ public sealed class LibraryService
 
     public void Reload()
     {
-        lock (_cacheGate) _cache = _db.GetAllWorks().ToList();
+        lock (_cacheGate)
+        {
+            _cache = _db.GetAllWorks().ToList();
+            _parsedTags.Clear();
+        }
         Changed?.Invoke();
     }
 
@@ -79,7 +85,7 @@ public sealed class LibraryService
                     UpdateDate = p.UpdateDate,
                     ThumbUrl = p.ImageUrls?.Thum ?? p.ImageUrls?.Main,
                     MainImageUrl = p.ImageUrls?.Main,
-                    TagsJson = tagsJson,
+                    TagsJson = ParseTags(tagsJson).Count > 0 ? tagsJson : prev?.TagsJson ?? "[]",
                     IsFavorite = prev?.IsFavorite ?? false,
                     IsHidden = prev?.IsHidden ?? false,
                     IsDownloaded = prev?.IsDownloaded ?? false,
@@ -433,12 +439,22 @@ public sealed class LibraryService
             .OrderBy(t => t, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+    private HashSet<string> CachedTags(WorkItem work)
+    {
+        var json = work.TagsJson;
+        if (_parsedTags.TryGetValue(work.Workno, out var cached) && cached.Json == json)
+            return cached.Tags;
+        var tags = new HashSet<string>(ParseTags(json), StringComparer.OrdinalIgnoreCase);
+        _parsedTags[work.Workno] = (json, tags);
+        return tags;
+    }
+
     public IReadOnlyList<string> DistinctTags()
     {
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var w in _cache)
         {
-            foreach (var tag in ParseTags(w.TagsJson))
+            foreach (var tag in CachedTags(w))
                 if (!string.IsNullOrWhiteSpace(tag))
                     set.Add(tag);
         }
@@ -447,8 +463,10 @@ public sealed class LibraryService
 
     public async Task EnsureLibraryTagsAsync(CancellationToken ct = default)
     {
-        foreach (var work in _cache.ToArray())
-            await EnsureTagsAsync(work.Workno, ct).ConfigureAwait(false);
+        await Parallel.ForEachAsync(_cache.ToArray(),
+            new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = ct },
+            async (work, token) => await EnsureTagsAsync(work.Workno, token).ConfigureAwait(false))
+            .ConfigureAwait(false);
     }
 
     public async Task EnsureTagsAsync(string workno, CancellationToken ct = default)
@@ -456,8 +474,12 @@ public sealed class LibraryService
         await _tagGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            var work = _cache.FirstOrDefault(w => w.Workno == workno);
-            if (work is null || ParseTags(work.TagsJson).Count > 0 || _tagAttempts.Contains(workno)) return;
+            WorkItem? work;
+            lock (_cacheGate)
+            {
+                work = _cache.FirstOrDefault(w => w.Workno == workno);
+                if (work is null || ParseTags(work.TagsJson).Count > 0 || !_tagAttempts.Add(workno)) return;
+            }
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
             deadline.CancelAfter(TimeSpan.FromSeconds(15));
             List<string> tags = [];
@@ -477,7 +499,6 @@ public sealed class LibraryService
                 var html = await _api.GetProductPageAsync(workno, work.SiteId, deadline.Token).ConfigureAwait(false);
                 tags = ProductPageTags.Parse(html).ToList();
             }
-            _tagAttempts.Add(workno);
             tags = tags.Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             if (tags.Count == 0) return;
@@ -492,7 +513,12 @@ public sealed class LibraryService
             }
             Changed?.Invoke();
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            lock (_cacheGate) _tagAttempts.Remove(workno);
+            throw;
+        }
+        catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "Tags unavailable for {Workno}", workno);
@@ -523,7 +549,9 @@ public sealed class LibraryService
         bool downloadedOnly,
         string? tagFilter,
         IReadOnlyCollection<string>? workTypeFilter = null,
-        bool updatesOnly = false)
+        bool updatesOnly = false,
+        IReadOnlyCollection<string>? tagFilters = null,
+        bool matchAllTags = true)
     {
         IEnumerable<WorkItem> q = _cache;
         if (!showHidden) q = q.Where(w => !w.IsHidden);
@@ -543,8 +571,16 @@ public sealed class LibraryService
         }
         if (!string.IsNullOrWhiteSpace(tagFilter))
         {
-            q = q.Where(w => ParseTags(w.TagsJson)
-                .Any(t => string.Equals(t, tagFilter, StringComparison.OrdinalIgnoreCase)));
+            q = q.Where(w => CachedTags(w).Contains(tagFilter));
+        }
+        if (tagFilters is { Count: > 0 })
+        {
+            var selected = new HashSet<string>(tagFilters, StringComparer.OrdinalIgnoreCase);
+            q = q.Where(w =>
+            {
+                var tags = CachedTags(w);
+                return matchAllTags ? selected.IsSubsetOf(tags) : selected.Overlaps(tags);
+            });
         }
         return q.ToList();
     }
@@ -592,7 +628,9 @@ public sealed class LibraryService
         Reload();
     }
 
-    public async Task MarkUninstalledAsync(string workno, CancellationToken ct = default)
+    /// <summary>Remove the installed copy. Returns false when the folder could not be deleted;
+    /// the installed state is then kept because the work is still on disk.</summary>
+    public async Task<bool> MarkUninstalledAsync(string workno, CancellationToken ct = default)
     {
         var w = _db.GetWork(workno);
         if (w?.InstallPath is { } path && Directory.Exists(path))
@@ -604,18 +642,14 @@ public sealed class LibraryService
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Uninstall delete failed for {Path}", path);
+                // Keep the installed state: the work is still on disk.
+                Reload();
+                return false;
             }
         }
         _db.SetDownloaded(workno, false, null, null);
         _db.SetSelectedExe(workno, null, w?.UseJapanLocale ?? false);
         Reload();
-    }
-
-    public void ClearSelectedExe(string workno)
-    {
-        var w = _db.GetWork(workno);
-        if (w is null) return;
-        _db.SetSelectedExe(workno, null, w.UseJapanLocale);
-        Reload();
+        return true;
     }
 }

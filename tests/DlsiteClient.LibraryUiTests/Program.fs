@@ -9,6 +9,8 @@ open Avalonia.Controls
 open Avalonia.Controls.Primitives
 open Avalonia.Headless
 open Avalonia.Interactivity
+open Avalonia.Input
+open Avalonia.Automation
 open Avalonia.LogicalTree
 open Avalonia.Threading
 open Microsoft.Extensions.DependencyInjection
@@ -45,7 +47,8 @@ type RecordingShell() =
         member _.OpenFolder path = opened <- path
         member _.OpenUrl _ = ()
         member _.Confirm(_,_) = false
-AppBuilder.Configure<App>().UseHeadless(AvaloniaHeadlessPlatformOptions()).SetupWithoutStarting() |> ignore
+let screenshotDirectory = Environment.GetEnvironmentVariable("DLSITE_UI_SCREENSHOTS")
+AppBuilder.Configure<App>().UseSkia().WithInterFont().UseHeadless(AvaloniaHeadlessPlatformOptions(UseHeadlessDrawing = false)).SetupWithoutStarting() |> ignore
 let root = Path.Combine(Path.GetTempPath(), "dlsite-library-ui-" + Guid.NewGuid().ToString("N"))
 Directory.CreateDirectory root |> ignore
 let paths =
@@ -141,7 +144,14 @@ userToggle secondBox
 check [firstId;secondId] "second click adds exactly one work"
 userToggle (rows () |> List.find (fun (id, _) -> id = firstId) |> snd)
 check [secondId] "uncheck removes only the clicked work"
-let byLabel key = buttons () |> List.find (fun b -> string b.Content = Localization.t key)
+let byLabel key =
+    buttons ()
+    |> List.find (fun b ->
+        let label = string b.Content
+        if key <> "library.filters" then label = Localization.t key
+        else
+            let format = Localization.t "library.filters.count"
+            label.StartsWith(format.Substring(0, format.IndexOf("{0}", StringComparison.Ordinal)), StringComparison.Ordinal))
 click (buttons () |> List.find (fun b -> string b.Content = Localization.t "library.col.update" + " ▼"))
 check [secondId] "sorting with selection does not select other works"
 click (byLabel "library.mode.grid")
@@ -170,18 +180,62 @@ check [secondId;gridId] "previous page retains its own selection"
 click (byLabel "library.next")
 check [pageId] "return to next page retains its own selection"
 let assertUi ok label = if not ok then failwith label else Console.WriteLine("PASS " + label)
+let filtersOpen () = descendants () |> List.exists (function :? CheckBox as cb when string cb.Content = Localization.t "library.filter.updates" -> true | _ -> false)
+assertUi (not (filtersOpen ())) "filters stay collapsed by default"
+let ensureFiltersOpen () = if not (filtersOpen ()) then click (byLabel "library.filters")
+ensureFiltersOpen ()
+let favoritesBox = descendants () |> List.pick (function :? CheckBox as cb when string cb.Content = Localization.t "library.filter.favorites" -> Some cb | _ -> None)
+userToggle favoritesBox
+assertUi ((rows ()).IsEmpty) "favorite filter may narrow to an empty catalog"
+assertUi ((string (byLabel "library.filters").Content) = (Localization.t "library.filters.count").Replace("{0}", "1")) "filter badge counts active filters"
+let resetButton = buttons () |> List.find (fun b -> string b.Content = Localization.t "library.filters.reset")
+click resetButton
+assertUi ((rows ()).Length = 20) "filter disclosure reset restores first page"
 let updatesBox () = descendants () |> List.pick (function :? CheckBox as cb when string cb.Content = Localization.t "library.filter.updates" -> Some cb | _ -> None)
 userToggle (updatesBox ())
 assertUi ((rows ()).Length = 12 && rows () |> List.forall (fun (id,_) -> (works |> List.find (fun w -> w.Workno = id)).HasUpdate)) "update filter resets paging and shows only outdated installs"
-click (byLabel "library.filters")
+ensureFiltersOpen ()
 click (buttons () |> List.find (fun b -> (string b.Content).EndsWith(Localization.t "library.tagFilter")))
-let tagsCombo = descendants () |> List.pick (function :? ComboBox as cb when cb.Items.Contains("school") -> Some cb | _ -> None)
-tagsCombo.SelectedItem <- "school uniform"; pump ()
+let tagBox tag = descendants () |> List.pick (function :? CheckBox as cb when string cb.Content = tag -> Some cb | _ -> None)
+userToggle (tagBox "school uniform")
 assertUi ((rows ()).IsEmpty) "tag and update filters combine in the UI"
 userToggle (updatesBox ())
 assertUi ((rows ()).Length = 13) "tag filter uses the complete tag name"
-tagsCombo.SelectedItem <- Localization.t "library.tags.all"; pump ()
-assertUi ((rows ()).Length = 20) "all-tags selection clears the tag filter"
+userToggle (tagBox "school")
+assertUi ((rows ()).IsEmpty) "match-all requires both selected tags"
+assertUi ((tagBox "school").IsChecked = Nullable true && (tagBox "school uniform").IsChecked = Nullable true) "multiple tags stay checked"
+click (byLabel "library.tags.matchAny")
+assertUi ((rows ()).Length = 20) "match-any combines selected tags"
+let tagSearchBox = descendants () |> List.pick (function :? TextBox as tb when string tb.PlaceholderText = Localization.t "library.tags.search" -> Some tb | _ -> None)
+tagSearchBox.Text <- "uniform"; pump ()
+assertUi ((rows ()).Length = 20) "tag search does not change selected filters"
+assertUi (descendants () |> List.exists (function :? CheckBox as cb -> string cb.Content = "school" | _ -> false) |> not) "tag search narrows choices"
+click (buttons () |> List.find (fun b -> (string b.Content).EndsWith(Localization.t "library.tagFilter")))
+click (byLabel "library.tags.clear")
+assertUi ((rows ()).Length = 20) "clear tags is available with tag section collapsed"
+// A large catalog creates only one batch of controls, while search covers every tag.
+works.Head.TagsJson <- System.Text.Json.JsonSerializer.Serialize(Array.append [| "school uniform" |] [| for i in 1..130 -> "zz-tag-" + i.ToString("D3") |])
+db.UpsertWorks [works.Head]
+library.Reload()
+pump ()
+click (buttons () |> List.find (fun b -> (string b.Content).EndsWith(Localization.t "library.tagFilter")))
+let searchTags () = descendants () |> List.pick (function :? TextBox as tb when string tb.PlaceholderText = Localization.t "library.tags.search" -> Some tb | _ -> None)
+(searchTags ()).Text <- ""
+pump ()
+let catalogBoxes () = descendants () |> List.choose (function :? CheckBox as cb when (string cb.Content).StartsWith("zz-tag-") || string cb.Content = "school" || string cb.Content = "school uniform" -> Some cb | _ -> None)
+assertUi ((catalogBoxes ()).Length = 60) "large tag catalog initially renders only sixty choices"
+click (byLabel "library.tags.showMore")
+assertUi ((catalogBoxes ()).Length = 120) "show more expands the tag batch"
+(searchTags ()).Text <- "zz-tag-130"
+pump ()
+assertUi ((catalogBoxes ()).Length = 1) "search reaches tags beyond rendered batches"
+userToggle (tagBox "zz-tag-130")
+assertUi ((rows ()).Length = 1) "selecting a searched tag filters the library"
+(searchTags ()).Text <- "no-such-tag"
+pump ()
+assertUi (descendants () |> List.exists (function :? TextBlock as tb -> tb.Text = Localization.t "library.tags.noResults" | _ -> false)) "empty tag search explains no results"
+assertUi ((rows ()).Length = 1) "empty search results retain selected filters"
+click (byLabel "library.tags.clear")
 let detailWork = works.Head
 let gameDir = Path.Combine(root, "installed-game")
 Directory.CreateDirectory gameDir |> ignore
@@ -195,6 +249,8 @@ library.Reload(); pump ()
 window.Content <- Views.DetailView.view detailWork.Workno ignore
 pump ()
 assertUi (descendants () |> List.exists (function :? TextBlock as tb -> tb.Text = "school uniform" | _ -> false)) "detail displays cached genre tags"
+let tagScroller = descendants () |> List.pick (function :? ScrollViewer as v when v.Name = "detail-tags" -> Some v | _ -> None)
+assertUi (tagScroller.Bounds.Height <= 120. && tagScroller.Extent.Height > tagScroller.Viewport.Height) "large detail tag list stays in a bounded scroll area"
 let folder = byLabel "detail.openFolder"
 assertUi folder.IsEnabled "installed work enables Open game folder"
 click folder
@@ -207,7 +263,7 @@ let waitFor state =
         pump (); attempts <- attempts + 1
     assertUi (launcher.GetLaunchState(detailWork.Workno) = state) ("launch state reaches " + string state)
 waitFor GameLaunchState.Starting
-assertUi (descendants () |> List.exists (function :? ProgressBar as p -> p.IsIndeterminate && p.Classes.Contains("circular") | _ -> false)) "Start shows a circular loading indicator"
+assertUi (descendants () |> List.exists (function :? ProgressBar as p -> p.IsIndeterminate | _ -> false)) "Start shows an indeterminate loading indicator"
 assertUi (not (byLabel "detail.play").IsEnabled) "Start is disabled while the process is pending"
 launcher.ConfirmAndLaunch(detailWork.Workno, gameExe, false, false)
 assertUi ((provider.GetRequiredService<IProcessLocale>() :?> UiStarter).Calls = 1) "repeated Start does not open another game"
@@ -224,6 +280,77 @@ detailWork.InstallPath <- Path.Combine(root,"missing-game")
 db.SetDownloaded(detailWork.Workno, true, detailWork.InstallPath, detailWork.LocalUpdateDate)
 db.SetSelectedExe(detailWork.Workno, gameExe, false); library.Reload(); pump ()
 assertUi (not (byLabel "detail.openFolder").IsEnabled) "missing directory disables Open game folder"
+// Exercise keyboard activation through the real headless input boundary.
+let mutable keyboardOpened = ""
+window.Content <- Views.LibraryView.view (fun id -> keyboardOpened <- id) ignore
+pump ()
+for modeKey in [ "library.mode.grid"; "library.mode.hybrid" ] do
+    click (byLabel modeKey)
+    let card = descendants () |> List.pick (function :? Border as b when b.Classes.Contains("work") -> Some b | _ -> None)
+    assertUi (not (String.IsNullOrWhiteSpace(AutomationProperties.GetName card))) (modeKey + " has an accessible work name")
+    keyboardOpened <- ""
+    assertUi (card.Focus(NavigationMethod.Tab)) (modeKey + " accepts keyboard focus")
+    window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "\r")
+    window.KeyRelease(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "\r")
+    pump ()
+    assertUi (works |> List.exists (fun w -> w.Workno = keyboardOpened)) (modeKey + " opens detail with Enter")
+
+if not (String.IsNullOrEmpty screenshotDirectory) then
+    Directory.CreateDirectory screenshotDirectory |> ignore
+let capture name =
+    if not (String.IsNullOrEmpty screenshotDirectory) then
+        window.UpdateLayout()
+        pump ()
+        use frame = window.CaptureRenderedFrame()
+        if isNull frame then failwith ("No rendered frame: " + name)
+        frame.Save(Path.Combine(screenshotDirectory, name + ".png"))
+
+for locale in [ "ja"; "zh-TW" ] do
+    Localization.globalI18n.Load(locale, Path.GetFullPath "locales")
+    for width in [ 960.; 1280.; 1440. ] do
+        settings.Update(fun s -> s.ViewMode <- LibraryViewMode.List)
+        window.Width <- width
+        window.Height <- 800.
+        window.Content <- Views.MainView.view ()
+        pump ()
+        for key in [ "library.mode.list"; "library.mode.grid"; "library.mode.hybrid"; "library.filters" ] do
+            let button = byLabel key
+            let point = button.TranslatePoint(Point(0., 0.), window).Value
+            assertUi (point.X >= 176. && point.X + button.Bounds.Width <= width && point.Y >= 0. && point.Y + button.Bounds.Height <= 800.)
+                (locale + " " + string width + " " + key + " stays inside window")
+        if width = 960. then
+            let resultsY =
+                descendants ()
+                |> List.choose (function
+                    | :? TextBlock as tb when tb.Text = Localization.t "library.col.title" ->
+                        let point = tb.TranslatePoint(Point(0., 0.), window)
+                        if point.HasValue then Some point.Value.Y else None
+                    | _ -> None)
+                |> List.tryHead
+            assertUi (resultsY |> Option.exists (fun y -> y < 230.))
+                (locale + " compact controls reveal the catalog near the top of 960px view")
+        capture (locale + "-library-list-" + string width)
+        if width = 960. then
+            (byLabel "nav.library").Focus(NavigationMethod.Tab) |> ignore
+            capture (locale + "-navigation-focus-960")
+        if width <> 1280. then
+            click (byLabel "library.mode.grid")
+            capture (locale + "-library-grid-" + string width)
+            click (byLabel "library.mode.hybrid")
+            capture (locale + "-library-hybrid-" + string width)
+            click (byLabel "nav.downloads")
+            capture (locale + "-downloads-" + string width)
+            click (byLabel "nav.settings")
+            capture (locale + "-settings-" + string width)
+            click (byLabel "nav.library")
+            click (byLabel "library.mode.hybrid")
+            let firstWork = descendants () |> List.pick (function :? Border as b when b.Classes.Contains("work") -> Some b | _ -> None)
+            firstWork.Focus(NavigationMethod.Tab) |> ignore
+            window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "\r")
+            window.KeyRelease(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "\r")
+            pump ()
+            capture (locale + "-detail-" + string width)
+
 window.Close()
 Services.shared <- None
 provider.DisposeAsync().AsTask().GetAwaiter().GetResult()

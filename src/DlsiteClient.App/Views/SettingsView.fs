@@ -14,16 +14,17 @@ open DlsiteClient.App.NestImportPrompt
 #endif
 open DlsiteClient.App.OAuthLogin
 open DlsiteClient.App.Services
+open DlsiteClient.App.Palette
 open DlsiteClient.App.UiAsync
 open DlsiteClient.Platform
 
-let private colorOutline = "#DFE6EF"
-let private colorOnSurfaceVariant = "#607087"
+let private colorOutline = Outline
+let private colorOnSurfaceVariant = InkMuted
 
 let private sectionCard (titleKey: string) (children: IView list) : IView =
     Border.create [
         Border.cornerRadius 8.0
-        Border.background "#FFFFFF"
+        Border.background Surface
         Border.borderBrush colorOutline
         Border.borderThickness 1.0
         Border.padding 16.0
@@ -35,7 +36,7 @@ let private sectionCard (titleKey: string) (children: IView list) : IView =
                         TextBlock.text (t titleKey)
                         TextBlock.fontSize 16.0
                         TextBlock.fontWeight FontWeight.SemiBold
-                        TextBlock.foreground "#142337"
+                        TextBlock.foreground Ink
                     ]
                     yield! children
                 ]
@@ -217,7 +218,6 @@ let view () =
                 ]
                 // Manual SID fallback is a debug path — collapsed out of the primary flow.
                 Button.create [
-                    Button.classes [ "flat" ]
                     Button.horizontalAlignment HorizontalAlignment.Left
                     Button.padding (0.0, 4.0)
                     Button.background "Transparent"
@@ -231,7 +231,7 @@ let view () =
                         StackPanel.children [
                             TextBox.create [
                                 TextBox.width 260.0
-                                TextBox.watermark "__DLsite_SID"
+                                TextBox.watermark (t "auth.sidPlaceholder")
                                 TextBox.passwordChar '*'
                                 TextBox.text sidInput.Current
                                 TextBox.onTextChanged sidInput.Set
@@ -246,6 +246,7 @@ let view () =
                                         runAsyncUnit
                                             (fun () -> svc.Auth.ApplyLoginAsync(sid, null))
                                             (fun () ->
+                                                sidInput.Set ""
                                                 busy.Set false
                                                 status.Set (t "auth.loginOk")
                                                 syncAfterLogin ())
@@ -379,20 +380,34 @@ let view () =
                     ] :> IView)
             ]
 
+        let logLevels =
+            [ "Verbose", "settings.logLevel.verbose"
+              "Debug", "settings.logLevel.debug"
+              "Information", "settings.logLevel.info"
+              "Warning", "settings.logLevel.warning"
+              "Error", "settings.logLevel.error"
+              "Fatal", "settings.logLevel.fatal" ]
+
         let loggingCard =
             sectionCard "settings.logging" [
                 settingRow "settings.logLevel" (
                     ComboBox.create [
                         ComboBox.width 160.0
                         ComboBox.horizontalAlignment HorizontalAlignment.Left
-                        ComboBox.dataItems
-                            [ "Verbose"; "Debug"; "Information"; "Warning"; "Error"; "Fatal" ]
-                        ComboBox.selectedItem logLevel.Current
+                        ComboBox.dataItems (logLevels |> List.map (fun (_, key) -> t key))
+                        ComboBox.selectedItem (
+                            logLevels
+                            |> List.tryFind (fun (value, _) -> value = logLevel.Current)
+                            |> Option.map (fun (_, key) -> t key)
+                            |> Option.defaultValue (t "settings.logLevel.info"))
                         ComboBox.onSelectedItemChanged (fun o ->
                             match o with
-                            | :? string as s ->
-                                logLevel.Set s
-                                applyLog ()
+                            | :? string as label ->
+                                match logLevels |> List.tryFind (fun (_, key) -> t key = label) with
+                                | Some (value, _) when value <> logLevel.Current ->
+                                    logLevel.Set value
+                                    applyLog ()
+                                | _ -> ()
                             | _ -> ())
                     ] :> IView)
                 settingRow "settings.logPath" (
@@ -437,7 +452,7 @@ let view () =
             [ accountCard; environmentCard; downloadCard; loggingCard ] @ linuxCard
 
         ScrollViewer.create [
-            ScrollViewer.background "#F0F3F8"
+            ScrollViewer.background Paper
             ScrollViewer.content (
                 StackPanel.create [
                     StackPanel.margin 20.0

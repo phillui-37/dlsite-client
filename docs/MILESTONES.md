@@ -86,3 +86,11 @@ Took ownership of the pending OIDC finalization and completed the UI handoff pas
 - Shell: nav rail brand block with accent mark; navigation behavior and labels unchanged.
 - New strings only in `locales/ja.json` + `locales/zh-TW.json`, including download-state labels (extracting, queued) so raw enum names never render.
 - Validation (Windows host, managed Release builds for both TFMs, 0 errors): core regression 53 checks passed; headless library UI suite fully green; ten headless-render screenshots (ja + zh-TW; list/grid/hybrid/advanced/downloads/settings/SID-open/detail) captured from the real views with synthetic data in `.local-notes/shots-2026-11-04`. No live account, purchase, download or commercial game launch in this pass.
+
+### Large tag catalog review — 2026-10-17
+
+Reviewed merged PR #19 and successfully fetched the DLsite /maniax/fs reference. Its genre picker includes keyword search, grouped choices and explicit empty-search feedback. The app follow-up renders tag controls in batches of 60, searches the full cached catalog, shows displayed/total and selected counts, and explains empty searches. Selected chips remain available outside the expanded filters.
+
+Tag queries and catalog enumeration reuse parsed per-work tag sets until the JSON changes. Library service/thumbnail/launch notifications are coalesced on a 100 ms dispatcher timer during background metadata loading. Four-request network concurrency and session failure caching from PR #19 remain in place.
+
+Validation: both Release app targets build (existing warnings remain); 72 core checks and 44 headless UI checks pass. New checks cover changed metadata invalidating the parsed cache and selection/search/show-more behavior with 132 tags. No live-account backfill timing or desktop visual inspection was performed; installers were not rebuilt.

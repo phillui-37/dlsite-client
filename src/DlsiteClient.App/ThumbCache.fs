@@ -9,6 +9,7 @@ open System.Threading.Tasks
 open Avalonia.Media
 open Avalonia.Media.Imaging
 open Avalonia.Controls
+open Avalonia.Input
 open Avalonia.Layout
 open Avalonia.FuncUI.DSL
 open Avalonia.FuncUI.Types
@@ -70,6 +71,10 @@ let private download (url: string) =
         notify ()
     }
 
+/// Drop a cached failure so the next <see cref="request"/> fetches again.
+let invalidate (url: string) =
+    if not (String.IsNullOrWhiteSpace url) then cache.TryRemove url |> ignore
+
 /// Request a thumb; starts background fetch at most once. Safe on UI thread.
 let request (url: string) : unit =
     if String.IsNullOrWhiteSpace url then ()
@@ -87,12 +92,12 @@ let private skeleton (w: float) (h: float) : IView =
     Border.create [
         Border.width w
         Border.height h
-        Border.background "#E5E7EB"
+        Border.background Palette.Outline
         Border.cornerRadius 4.0
         Border.child (
             TextBlock.create [
                 TextBlock.text "…"
-                TextBlock.foreground "#9CA3AF"
+                TextBlock.foreground Palette.InkMuted
                 TextBlock.horizontalAlignment HorizontalAlignment.Center
                 TextBlock.verticalAlignment VerticalAlignment.Center
             ])
@@ -117,7 +122,17 @@ let thumbView (url: string) (w: float) (h: float) : IView =
         Border.create [
             Border.width w
             Border.height h
-            Border.background "#F3F4F6"
+            Border.background Palette.SurfaceMuted
             Border.cornerRadius 4.0
+            Border.onPointerPressed (fun e ->
+                e.Handled <- true
+                invalidate url)
+            Border.child (
+                TextBlock.create [
+                    TextBlock.text "!"
+                    TextBlock.foreground Palette.InkMuted
+                    TextBlock.horizontalAlignment HorizontalAlignment.Center
+                    TextBlock.verticalAlignment VerticalAlignment.Center
+                ])
         ]
         :> IView

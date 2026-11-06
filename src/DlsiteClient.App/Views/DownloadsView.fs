@@ -13,19 +13,20 @@ open DlsiteClient.App.Localization
 open DlsiteClient.App.Services
 open DlsiteClient.App.Fmt
 open DlsiteClient.App.UiAsync
+open DlsiteClient.App.Palette
 
-let private colorOutline = "#DFE6EF"
-let private colorOnSurfaceVariant = "#607087"
+let private colorOutline = Outline
+let private colorOnSurfaceVariant = InkMuted
 
 let private stateColor (s: DownloadJobState) =
     match s with
-    | DownloadJobState.Downloading -> "#1976D2"
-    | DownloadJobState.Paused -> "#FB8C00"
-    | DownloadJobState.Failed -> "#E53935"
-    | DownloadJobState.CorruptArchive -> "#C62828"
-    | DownloadJobState.Extracting -> "#8E24AA"
-    | DownloadJobState.Completed -> "#43A047"
-    | _ -> "#90A4AE"
+    | DownloadJobState.Downloading -> Clay
+    | DownloadJobState.Paused -> Clay
+    | DownloadJobState.Failed -> Error
+    | DownloadJobState.CorruptArchive -> Error
+    | DownloadJobState.Extracting -> Moss
+    | DownloadJobState.Completed -> Moss
+    | _ -> InkMuted
 
 let private fileName (s: string) =
     if String.IsNullOrEmpty s then "" else s
@@ -59,7 +60,7 @@ let private jobRow
         Border.margin (4.0, 2.0, 4.0, 6.0)
         Border.padding (10.0, 8.0)
         Border.cornerRadius 6.0
-        Border.background "#FAFCFF"
+        Border.background Surface
         Border.borderBrush colorOutline
         Border.borderThickness (0.0, 0.0, 0.0, 1.0)
         Border.child (
@@ -162,7 +163,7 @@ let private jobRow
                                 TextBlock.create [
                                     TextBlock.text j.ErrorMessage
                                     TextBlock.fontSize 12.0
-                                    TextBlock.foreground "#C62828"
+                                    TextBlock.foreground Error
                                     TextBlock.textWrapping TextWrapping.Wrap
                                 ]
                         ]
@@ -177,7 +178,7 @@ let private sectionCard (label: string) (count: int) (headingExtra: IView option
         Border.margin (0.0, 0.0, 0.0, 12.0)
         Border.padding 8.0
         Border.cornerRadius 8.0
-        Border.background "#FFFFFF"
+        Border.background Surface
         Border.borderBrush colorOutline
         Border.borderThickness 1.0
         Border.child (
@@ -253,7 +254,7 @@ let view () =
 
         let heading : IView =
             Border.create [
-                Border.background "#FFFFFF"
+                Border.background Surface
                 Border.borderBrush colorOutline
                 Border.borderThickness (0.0, 0.0, 0.0, 1.0)
                 Border.padding (20.0, 16.0)
@@ -273,7 +274,7 @@ let view () =
                                         TextBlock.text (t "nav.downloads")
                                         TextBlock.fontSize 20.0
                                         TextBlock.fontWeight FontWeight.SemiBold
-                                        TextBlock.foreground "#142337"
+                                        TextBlock.foreground Ink
                                     ]
                                     TextBlock.create [
                                         TextBlock.fontSize 13.0
@@ -287,15 +288,15 @@ let view () =
                                     if svc.Downloads.IsPausedForAuth || svc.Auth.NeedsRelogin then
                                         Border.create [
                                             Border.horizontalAlignment HorizontalAlignment.Left
-                                            Border.background "#FFF3E0"
-                                            Border.borderBrush "#FFB74D"
+                                            Border.background ClayContainer
+                                            Border.borderBrush Clay
                                             Border.borderThickness 1.0
                                             Border.cornerRadius 6.0
                                             Border.padding (10.0, 4.0)
                                             Border.child (
                                                 TextBlock.create [
                                                     TextBlock.text (t "auth.queuePaused")
-                                                    TextBlock.foreground "#E65100"
+                                                    TextBlock.foreground ClayHover
                                                     TextBlock.fontSize 12.0
                                                 ])
                                         ]
@@ -321,7 +322,7 @@ let view () =
                   (done' |> Seq.map (fun j -> jobRow svc j "done" bump) |> Seq.toList) ]
 
         DockPanel.create [
-            DockPanel.background "#F0F3F8"
+            DockPanel.background Paper
             DockPanel.children [
                 Border.create [
                     DockPanel.dock Dock.Top

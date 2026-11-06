@@ -5,7 +5,7 @@ Clean-room Nest replacement for library management only. Windows and Linux suppo
 ## Library
 
 - Filters: All / Games / Images / Videos / Audio / Other + work-type checkboxes; fav / hidden / downloaded / update available; tag filter with background loading
-- Filter chrome stays **collapsed by default**; expand only when the user opens a section (work types, columns, advanced filters)
+- Filter chrome stays **collapsed by default**. Keep search, view, and sort available in the compact catalog header. Place media, status, work-type, tag, and column filters behind one clearly labelled disclosure with a localized active-filter count; keep the reset action there. Show result count, page size, and page navigation in the results footer.
 - Work-type codes shown via i18n / Nest work-type names (never raw-only when a label exists)
 - Modes: list (selectable sortable columns), grid (thumb + title), hybrid
 - Columns: purchase date, title+thumb (fixed), maker, work format, store rating as text `x/5` (default `0/5`, no stars), sales date, download flag only, extract size separate; **no Viewer**
@@ -17,6 +17,9 @@ Clean-room Nest replacement for library management only. Windows and Linux suppo
 - Search: fuzzy title + maker only
 - Metadata + thumbnails load **off the UI thread**; placeholders/skeletons until ready; thumbs fill in as fetches complete
 - **Local install detect:** reconcile library folder against purchases. Nest layout is `{libraryDirectory}/Game/{makerName}/{workName}` (also accept `{makerName}/{workName}` and `{workno}` at the library root). Run after purchase sync and on library view boot (off UI thread). Downloaded column header must fit full i18n label (no clip).
+- **Library boot and sync entry:** library view boot loads work-type names and runs local install detect only; purchase sync is never started automatically from library boot. When the user is signed in and no work is stored, the library empty state offers the existing Sync action, run off the UI thread, with a busy state and a visible localized failure.
+- **Sort control:** the sort column and direction are selectable in every mode (list headers stay as a shortcut); grid and hybrid must not show an order the user cannot see or change.
+- **Uninstall failure:** when the installed folder cannot be deleted, keep the installed state and show a localized failure. Batch uninstall reports that at least one work failed.
 
 ## Tags
 
@@ -124,7 +127,7 @@ Clean-room Nest replacement for library management only. Windows and Linux suppo
 ## Library filters and detail folders — 2026-10-17
 
 - Add an update-available library filter using WorkItem.HasUpdate. Combine it with existing filters and reset paging on change.
-- Keep tag filtering visible even when no tags are cached. Opening it loads missing tags for all library works off the UI thread, with serialized requests and per-session attempt caching. Opening detail also loads missing tags. Persist tags without changing install or download state.
+- Keep tag filtering visible even when no tags are cached. Opening it loads missing tags for all library works off the UI thread, with bounded concurrent requests and per-session attempt caching. Opening detail also loads missing tags. Persist tags without changing install or download state.
 - Prefer purchase API tags, then store-section product.json genres, then genre links in a product page's main_genre block. Ignore other page links. Missing/blocked/failed metadata leaves tags blank; do not bypass geo-blocks or invalidate the login session.
 - Detail shows an Open game folder action when an existing install directory is available. Use the platform shell and report failures with the existing status text.
 - Store fallback labels in locales only. Tag filter matches a complete tag, not a substring.
@@ -162,8 +165,29 @@ MSI tests must not upgrade or remove an installed copy on this PC. Check all rel
 
 ## UI finalization pass — 2026-11-04
 
-- Library header is layered: title + count, search with a segmented list/grid/hybrid switch, media chips, then quick filters with the advanced toggle inline; paging controls sit right-aligned under the toolbar. Filter, sort, selection and paging behavior is unchanged.
+- Library keeps a compact heading/search row and view/sort controls. Media/status/work-type/tag/column controls share a collapsed disclosure with a localized active-filter count and reset action. Result count and paging sit in the footer. Filter, sort, selection and paging behavior is preserved.
 - Downloads shows a page heading with session stats and Resume all; Active / Up Next / Completed are separate cards with counts and empty states. Job rows show a state dot, separated error text and per-state actions.
 - Settings uses section cards with two-column rows. The manual SID fallback stays collapsed behind a debug disclosure and masks its input; language and proxy choices render localized labels.
 - Detail groups work data into header, actions, info and launch-settings cards; the launch action is visually primary. Work-type and downloaded cells always render localized labels.
 - Download job state names (extracting, queued) come from locales, not enum names.
+
+## Library tag filtering refresh
+
+- Replace the single tag dropdown with searchable multi-select checkboxes in a bounded, scrollable filter surface. Keep advanced sections collapsed by default.
+- Default to matching all selected complete tags; offer matching any selected tag. Show selected tags with removal actions and a clear action, including when the filter section is collapsed. Tag search only narrows available choices.
+- Fetch missing tags with at most four concurrent requests, deduplicate overlapping detail/library requests, cache failed attempts per session, and keep caller cancellation retryable. Publish tags as each work completes; cached tags remain usable while loading.
+- Retain cached fallback tags when purchase sync has no API tags. Never change install state while saving metadata.
+
+## Large tag libraries follow-up
+
+- Render tag choices in batches of 60, with show-more and search across the full catalog. Show displayed/total and selected counts, and an explicit no-search-results message. Keep selections when searching or expanding choices.
+- Reuse parsed tag sets per work until its tags JSON changes. Coalesce library view refreshes during metadata backfill to keep the UI responsive.
+
+## Wabi-sabi UI — 2026-11-07
+
+- Replace Material presentation with Avalonia Simple and a shared paper/charcoal/clay/moss palette. Keep the locked FuncUI stack and all service behavior.
+- Keep focus, hover, pressed, selected and disabled states legible. Show selected navigation with an edge marker and weight.
+- Library filter/view controls must fit 960, 1280 and 1440 desktop widths in ja and zh-TW; table columns retain shared horizontal scrolling.
+- Grid/hybrid works accept keyboard focus and Enter to open detail. Selection checkboxes have localized accessible names.
+- Bound the settings form width and detail-tag height; keep detail actions spaced and the installed work's Play action primary.
+- Use an indeterminate busy indicator for launch preparation/start. No Material-specific shape is required.
