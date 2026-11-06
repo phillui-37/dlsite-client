@@ -9,6 +9,26 @@ $Out = Join-Path $Root "artifacts\aot-win-x64"
 $Dotnet = "$env:USERPROFILE\scoop\apps\dotnet-sdk\current\dotnet.exe"
 if (-not (Test-Path $Dotnet)) { $Dotnet = "dotnet" }
 
+# The MSBuild task host must resolve through the same SDK and runtime root as
+# the selected dotnet executable. Inherited machine paths may point elsewhere.
+$DotnetSdkRoot = Split-Path -Parent $Dotnet
+if ($DotnetSdkRoot -and (Test-Path (Join-Path $DotnetSdkRoot "sdk"))) {
+    $SdkVersion = (& $Dotnet --version | Select-Object -Last 1).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $SdkVersion) {
+        throw "Could not resolve the SDK version from $Dotnet."
+    }
+
+    $SdkResolverPath = Join-Path (Join-Path (Join-Path $DotnetSdkRoot "sdk") $SdkVersion) "Sdks"
+    if (-not (Test-Path $SdkResolverPath)) {
+        throw "MSBuild SDK resolver directory not found: $SdkResolverPath"
+    }
+
+    $env:DOTNET_ROOT = $DotnetSdkRoot
+    $env:DOTNET_ROOT_X64 = $DotnetSdkRoot
+    $env:MSBuildSDKsPath = $SdkResolverPath
+    $env:Path = "$DotnetSdkRoot;$env:Path"
+}
+
 $vcvarsCandidates = @(
     "${env:ProgramFiles}\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"
     "${env:ProgramFiles}\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"

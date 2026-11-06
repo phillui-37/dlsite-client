@@ -14,6 +14,7 @@ open DlsiteClient.App.NestImportPrompt
 #endif
 open DlsiteClient.App.OAuthLogin
 open DlsiteClient.App.Services
+open DlsiteClient.App.Palette
 open DlsiteClient.App.UiAsync
 open DlsiteClient.Platform
 
@@ -88,8 +89,10 @@ let view () =
         ScrollViewer.create [
             ScrollViewer.content (
                 StackPanel.create [
-                    StackPanel.margin 16.0
-                    StackPanel.spacing 10.0
+                    StackPanel.maxWidth 760.0
+                    StackPanel.horizontalAlignment HorizontalAlignment.Left
+                    StackPanel.margin (24.0, 20.0)
+                    StackPanel.spacing 14.0
                     StackPanel.children [
                         TextBlock.create [
                             TextBlock.text (t "settings.account")
@@ -107,7 +110,7 @@ let view () =
                         if busy.Current || not (String.IsNullOrEmpty status.Current) then
                             TextBlock.create [
                                 TextBlock.text (if busy.Current then t "settings.working" else status.Current)
-                                TextBlock.foreground "#607087"
+                                TextBlock.foreground InkMuted
                                 TextBlock.textWrapping TextWrapping.Wrap
                             ]
                         StackPanel.create [
@@ -115,6 +118,7 @@ let view () =
                             StackPanel.spacing 8.0
                             StackPanel.children [
                                 Button.create [
+                                    Button.classes [ "primary" ]
                                     Button.content (t "auth.login")
                                     Button.isEnabled (not busy.Current)
                                     Button.onClick (fun _ ->

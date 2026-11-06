@@ -13,6 +13,8 @@ open DlsiteClient.App.Localization
 open DlsiteClient.App.Services
 open DlsiteClient.App.Fmt
 open DlsiteClient.App.UiAsync
+open DlsiteClient.App.Palette
+open DlsiteClient.App.Palette
 
 let private fileName (s: string) =
     if String.IsNullOrEmpty s then "" else s
@@ -133,14 +135,14 @@ let private jobRow
                                 (sizePlain j.BytesDownloaded)
                                 (sizePlain j.BytesTotal)
                                 statusLabel)
-                        TextBlock.foreground "#607087"
+                        TextBlock.foreground InkMuted
                         TextBlock.fontSize 12.0
                     ]
                     if not (String.IsNullOrEmpty j.ErrorMessage) then
                         TextBlock.create [
                             TextBlock.text j.ErrorMessage
                             TextBlock.textWrapping TextWrapping.Wrap
-                            TextBlock.foreground "#B3261E"
+                            TextBlock.foreground Error
                             TextBlock.fontSize 12.0
                         ]
                 ]
@@ -173,8 +175,8 @@ let view () =
             DockPanel.children [
                 Border.create [
                     DockPanel.dock Dock.Top
-                    Border.background "#FFFFFF"
-                    Border.borderBrush "#DFE6EF"
+                    Border.background Surface
+                    Border.borderBrush Outline
                     Border.borderThickness (0.0, 0.0, 0.0, 1.0)
                     Border.padding 20.0
                     Border.child (
@@ -208,13 +210,13 @@ let view () =
                                                     (sizeBps svc.Downloads.CurrentSpeedBps)
                                                     (sizeBps svc.Downloads.MaxSpeedBps)
                                                     (sizePlain svc.Downloads.SessionBytes) (t "downloads.total"))
-                                            TextBlock.foreground "#607087"
+                                            TextBlock.foreground InkMuted
                                             TextBlock.fontSize 12.0
                                         ]
                                         if svc.Downloads.IsPausedForAuth || svc.Auth.NeedsRelogin then
                                             TextBlock.create [
                                                 TextBlock.text (t "auth.queuePaused")
-                                                TextBlock.foreground "#B3261E"
+                                                TextBlock.foreground Error
                                                 TextBlock.margin (0.0, 4.0, 0.0, 0.0)
                                             ]
                                     ]
@@ -231,7 +233,7 @@ let view () =
                                     TextBlock.text (fmt2 "{0} ({1})" (t "downloads.active") active.Count)
                                     TextBlock.fontWeight FontWeight.SemiBold
                                     TextBlock.fontSize 13.0
-                                    TextBlock.foreground "#607087"
+                                    TextBlock.foreground InkMuted
                                   ]
                                   :> IView ]
                                 @ (active |> Seq.map (fun j -> jobRow svc j "active" bump :> IView) |> Seq.toList)
@@ -240,7 +242,7 @@ let view () =
                                       TextBlock.text (fmt2 "{0} ({1})" (t "downloads.upNext") upNext.Count)
                                       TextBlock.fontWeight FontWeight.SemiBold
                                       TextBlock.fontSize 13.0
-                                      TextBlock.foreground "#607087"
+                                      TextBlock.foreground InkMuted
                                     ]
                                     :> IView ]
                                 @ (upNext |> Seq.map (fun j -> jobRow svc j "upNext" bump :> IView) |> Seq.toList)
@@ -249,7 +251,7 @@ let view () =
                                       DockPanel.children [
                                           Button.create [
                                               DockPanel.dock Dock.Right
-                                              Button.classes [ "outline" ]
+
                                               Button.content (t "downloads.clearAll")
                                               Button.onClick (fun _ -> svc.Downloads.ClearCompleted(); bump ())
                                           ]
@@ -257,7 +259,7 @@ let view () =
                                               TextBlock.text (fmt2 "{0} ({1})" (t "downloads.completed") done'.Count)
                                               TextBlock.fontWeight FontWeight.SemiBold
                                               TextBlock.fontSize 13.0
-                                              TextBlock.foreground "#607087"
+                                              TextBlock.foreground InkMuted
                                               TextBlock.verticalAlignment VerticalAlignment.Center
                                           ]
                                       ]
@@ -269,7 +271,7 @@ let view () =
                                            TextBlock.text (t "downloads.empty")
                                            TextBlock.margin (32.0, 48.0, 32.0, 0.0)
                                            TextBlock.horizontalAlignment HorizontalAlignment.Center
-                                           TextBlock.foreground "#607087"
+                                           TextBlock.foreground InkMuted
                                          ] :> IView ]
                                    else []))
                         ])

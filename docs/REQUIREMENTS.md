@@ -5,7 +5,7 @@ Clean-room Nest replacement for library management only. Windows and Linux suppo
 ## Library
 
 - Filters: All / Games / Images / Videos / Audio / Other + work-type checkboxes; fav / hidden / downloaded / update available; tag filter with background loading
-- Filter chrome stays **collapsed by default**; expand only when the user opens a section (work types, columns, advanced filters)
+- Filter chrome stays **collapsed by default**. Keep search, view, and sort available in the compact catalog header. Place media, status, work-type, tag, and column filters behind one clearly labelled disclosure with a localized active-filter count; keep the reset action there. Show result count, page size, and page navigation in the results footer.
 - Work-type codes shown via i18n / Nest work-type names (never raw-only when a label exists)
 - Modes: list (selectable sortable columns), grid (thumb + title), hybrid
 - Columns: purchase date, title+thumb (fixed), maker, work format, store rating as text `x/5` (default `0/5`, no stars), sales date, download flag only, extract size separate; **no Viewer**
@@ -174,3 +174,12 @@ MSI tests must not upgrade or remove an installed copy on this PC. Check all rel
 
 - Render tag choices in batches of 60, with show-more and search across the full catalog. Show displayed/total and selected counts, and an explicit no-search-results message. Keep selections when searching or expanding choices.
 - Reuse parsed tag sets per work until its tags JSON changes. Coalesce library view refreshes during metadata backfill to keep the UI responsive.
+
+## Wabi-sabi UI — 2026-11-07
+
+- Replace Material presentation with Avalonia Simple and a shared paper/charcoal/clay/moss palette. Keep the locked FuncUI stack and all service behavior.
+- Keep focus, hover, pressed, selected and disabled states legible. Show selected navigation with an edge marker and weight.
+- Library filter/view controls must fit 960, 1280 and 1440 desktop widths in ja and zh-TW; table columns retain shared horizontal scrolling.
+- Grid/hybrid works accept keyboard focus and Enter to open detail. Selection checkboxes have localized accessible names.
+- Bound the settings form width and detail-tag height; keep detail actions spaced and the installed work's Play action primary.
+- Use an indeterminate busy indicator for launch preparation/start. No Material-specific shape is required.

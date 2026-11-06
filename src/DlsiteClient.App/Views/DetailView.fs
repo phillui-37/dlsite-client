@@ -14,6 +14,7 @@ open DlsiteClient.App.Services
 open DlsiteClient.App.Fmt
 open DlsiteClient.App.ThumbCache
 open DlsiteClient.App.UiAsync
+open DlsiteClient.App.Palette
 
 let private orDash (s: string) =
     if String.IsNullOrEmpty s then "-" else s
@@ -105,13 +106,14 @@ let view (workno: string) (onBack: unit -> unit) =
                     Button.create [
                         DockPanel.dock Dock.Top
                         Button.content (t "common.back")
-                        Button.margin 8.0
+                        Button.horizontalAlignment HorizontalAlignment.Left
+                        Button.margin (24.0, 16.0, 24.0, 0.0)
                         Button.onClick (fun _ -> onBack ())
                     ]
                     ScrollViewer.create [
                         ScrollViewer.content (
                             StackPanel.create [
-                                StackPanel.margin 16.0
+                                StackPanel.margin (24.0, 20.0)
                                 StackPanel.spacing 8.0
                                 StackPanel.children [
                                     thumbView (if isNull w.ThumbUrl then "" else w.ThumbUrl) 240.0 240.0
@@ -142,23 +144,30 @@ let view (workno: string) (onBack: unit -> unit) =
                                         TextBlock.create [
                                             TextBlock.text (
                                                 fmt2 "{0} {1}" (t "library.dlcBadge") (orDash w.ParentWorkno))
-                                            TextBlock.foreground Brushes.DarkOrange
+                                            TextBlock.foreground Clay
                                         ]
                                     TextBlock.create [
                                         TextBlock.text (t "detail.tags")
                                         TextBlock.fontWeight FontWeight.SemiBold
                                     ]
-                                    WrapPanel.create [
-                                        WrapPanel.children (
-                                            tags
-                                            |> List.map (fun tag ->
-                                                Border.create [
-                                                    Border.margin 2.0
-                                                    Border.padding 4.0
-                                                    Border.background "#E0F2FE"
-                                                    Border.child (TextBlock.create [ TextBlock.text tag ])
-                                                ]
-                                                :> IView))
+                                    ScrollViewer.create [
+                                        ScrollViewer.name "detail-tags"
+                                        ScrollViewer.maxHeight 120.0
+                                        ScrollViewer.horizontalScrollBarVisibility Primitives.ScrollBarVisibility.Disabled
+                                        ScrollViewer.content (
+                                            WrapPanel.create [
+                                                WrapPanel.children (
+                                                    tags
+                                                    |> List.map (fun tag ->
+                                                        Border.create [
+                                                            Border.margin 2.0
+                                                            Border.padding 4.0
+                                                            Border.background MossContainer
+                                                            Border.child (TextBlock.create [ TextBlock.text tag ])
+                                                        ]
+                                                        :> IView))
+                                            ]
+                                        )
                                     ]
                                     CheckBox.create [
                                         CheckBox.content (t "detail.japanLocale")
@@ -177,8 +186,10 @@ let view (workno: string) (onBack: unit -> unit) =
                                             TextBlock.opacity 0.8
                                         ]
                                     WrapPanel.create [
+                                        WrapPanel.classes [ "actions" ]
                                         WrapPanel.children [
                                             Button.create [
+                                                Button.classes (if w.IsDownloaded then [] else [ "primary" ])
                                                 Button.content (t "detail.download")
                                                 Button.onClick (fun _ -> svc.Downloads.Enqueue([ w ], false))
                                             ]
@@ -190,6 +201,7 @@ let view (workno: string) (onBack: unit -> unit) =
                                                 ]
                                             if w.IsDownloaded then
                                                 Button.create [
+                                                    Button.classes [ "primary" ]
                                                     Button.content (if launchState = GameLaunchState.Running then t "launcher.running" else t "detail.play")
                                                     Button.isEnabled (not starting && launchState <> GameLaunchState.Running)
                                                     Button.onClick (fun _ ->
@@ -246,12 +258,12 @@ let view (workno: string) (onBack: unit -> unit) =
                                             StackPanel.orientation Orientation.Horizontal
                                             StackPanel.spacing 8.0
                                             StackPanel.children [
-                                                ProgressBar.create [ ProgressBar.classes [ "circular" ]; ProgressBar.width 24.0; ProgressBar.height 24.0; ProgressBar.isIndeterminate true ]
+                                                ProgressBar.create [ ProgressBar.width 64.0; ProgressBar.height 4.0; ProgressBar.verticalAlignment VerticalAlignment.Center; ProgressBar.isIndeterminate true ]
                                                 TextBlock.create [ TextBlock.text (t "launcher.starting") ]
                                             ]
                                         ]
                                     if launchState = GameLaunchState.Failed then
-                                        TextBlock.create [ TextBlock.text (t (svc.Launcher.GetLaunchError workno)); TextBlock.foreground "#B3261E"; TextBlock.textWrapping TextWrapping.Wrap ]
+                                        TextBlock.create [ TextBlock.text (t (svc.Launcher.GetLaunchError workno)); TextBlock.foreground Error; TextBlock.textWrapping TextWrapping.Wrap ]
                                     match exeChoice.Current with
                                     | None -> TextBlock.create [ TextBlock.text "" ]
                                     | Some exes ->
@@ -294,7 +306,7 @@ let view (workno: string) (onBack: unit -> unit) =
                                         ]
                                     TextBlock.create [
                                         TextBlock.text status.Current
-                                        TextBlock.foreground "#B3261E"
+                                        TextBlock.foreground Error
                                         TextBlock.textWrapping TextWrapping.Wrap
                                     ]
                                 ]
