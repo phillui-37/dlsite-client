@@ -1,6 +1,6 @@
 # DLsite Client
 
-Cross-platform Nest replacement: **Avalonia.FuncUI (F#)** UI + **.NET 10** Core. Windows first; Linux via Proton/Wine + AppImage.
+Cross-platform Nest replacement: **Avalonia.FuncUI (F#)** UI + **.NET 11** Core. Windows first; Linux via Proton/Wine + AppImage.
 
 Docs in [`docs/`](docs/) are the source of truth ([`AGENTS.md`](AGENTS.md)). Milestones **M0–M6** are complete ([`docs/MILESTONES.md`](docs/MILESTONES.md)).
 
@@ -17,11 +17,13 @@ Docs in [`docs/`](docs/) are the source of truth ([`AGENTS.md`](AGENTS.md)). Mil
 
 ## Build / run
 
+Install a stable .NET 11 SDK (11.0.100 or a later 11.0 feature band). Run `dotnet --version` from the checkout to verify SDK selection.
+
 ### Windows
 
 ```powershell
 .\scripts\build.ps1
-dotnet run --project src/DlsiteClient.App -c Release -f net10.0-windows
+dotnet run --project src/DlsiteClient.App -c Release -f net11.0-windows
 ```
 
 Publish (needs VS C++ / `vcvars64` for AOT; WiX for MSI):
@@ -34,8 +36,8 @@ Publish (needs VS C++ / `vcvars64` for AOT; WiX for MSI):
 ### Linux
 
 ```bash
-dotnet build src/DlsiteClient.App/DlsiteClient.App.fsproj -c Release -f net10.0
-dotnet run --project src/DlsiteClient.App -c Release -f net10.0
+dotnet build src/DlsiteClient.App/DlsiteClient.App.fsproj -c Release -f net11.0
+dotnet run --project src/DlsiteClient.App -c Release -f net11.0
 ./scripts/publish-appimage.sh          # self-contained folder + AppImage staging
 ./scripts/publish-appimage.sh --aot    # AOT when toolchain present
 ```

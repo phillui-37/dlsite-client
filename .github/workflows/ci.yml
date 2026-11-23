@@ -22,8 +22,17 @@ jobs:
         shell: pwsh
     steps:
       - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-dotnet@v6.1.0
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
+        with:
+          global-json-file: global.json
       - name: Check SDK
-        run: dotnet --info
+        run: |
+          dotnet --version
+          if ($LASTEXITCODE -ne 0) { throw 'Could not select the SDK from global.json' }
+          "DOTNET_ROOT_X64=$env:DOTNET_ROOT" >> $env:GITHUB_ENV
+          'MSBuildSDKsPath=' >> $env:GITHUB_ENV
       - name: Core regression checks
         run: |
           dotnet run --project tests/DlsiteClient.RegressionTests -c Release
@@ -58,6 +67,13 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-dotnet@v6.1.0
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
+        with:
+          global-json-file: global.json
+      - name: Check SDK
+        run: dotnet --version
       - name: Core regression checks on Linux
         run: dotnet run --project tests/DlsiteClient.RegressionTests -c Release
       - name: Library UI checks on Linux

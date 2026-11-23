@@ -12,7 +12,7 @@
 ## Stack (locked)
 
 - UI: Avalonia.FuncUI (F#)
-- Core / platform: C# (.NET 10)
+- Core / platform: C# (.NET 11)
 - Publish target: Native AOT (see `docs/DECISIONS.md` for fallback)
 - Windows first; Linux/Proton is M5+
 
@@ -25,10 +25,10 @@
 
 ## Cursor Cloud specific instructions
 
-- .NET SDK 10 is on `PATH` as `dotnet`. The wrapper sets `DOTNET_ROOT` and `LD_LIBRARY_PATH`.
+- Run with a stable .NET 11 SDK on `PATH` as `dotnet`. The wrapper sets `DOTNET_ROOT` and `LD_LIBRARY_PATH`.
 - Dev build (managed, not Native AOT): `dotnet build src/DlsiteClient.App/DlsiteClient.App.fsproj -c Release`
-- Dev run needs `DISPLAY`. `dotnet run --project src/DlsiteClient.App -c Release`. UI locale defaults to `ja`.
-- App TFMs are `net10.0-windows` and `net10.0`. `Services.fs` compiles Windows or Linux platform types by target; only the Windows target includes Nest import. Linux core checks pass in SteamOS recovery; see `docs/STEAMOS.md` for release blockers. `/usr/local/lib/dlsite-winshim` supplies `CredRead` and `MessageBoxW` so the window can open. `CredRead` returns not-found. That shim is not a credential store.
+- Dev run needs `DISPLAY`. `dotnet run --project src/DlsiteClient.App -c Release -f net11.0`. UI locale defaults to `ja`.
+- App TFMs are `net11.0-windows` and `net11.0`. `Services.fs` compiles Windows or Linux platform types by target; only the Windows target includes Nest import. Linux core checks pass in SteamOS recovery; see `docs/STEAMOS.md` for release blockers. `/usr/local/lib/dlsite-winshim` supplies `CredRead` and `MessageBoxW` so the window can open. `CredRead` returns not-found. That shim is not a credential store.
 - Settings apply on change and use the selected platform startup registration. Do not use the old Windows-only settings limitation as a description of current code.
 - Native AOT and MSI stay on Windows (`scripts/publish-aot.ps1`, `vcvars64`). Do not publish AOT on this VM.
 - `7z` is installed for archive checks.

@@ -6,7 +6,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${ROOT}/artifacts/linux-x64"
 APPDIR="${ROOT}/artifacts/appimage/DlsiteClient.AppDir"
-TFM="net10.0"
+TFM="net11.0"
 RID="linux-x64"
 AOT=false
 SKIP_PUBLISH=false
@@ -33,7 +33,7 @@ else
 fi
 
 if [[ "$SKIP_PUBLISH" != true ]]; then
-  dotnet publish "${ROOT}/src/DlsiteClient.App/DlsiteClient.App.fsproj" "${PUB_ARGS[@]}"
+  (cd "$ROOT" && dotnet publish "${ROOT}/src/DlsiteClient.App/DlsiteClient.App.fsproj" "${PUB_ARGS[@]}")
 fi
 test -f "${OUT}/DlsiteClient.App"
 
@@ -45,13 +45,14 @@ python3 "${ROOT}/scripts/bundle-webkit.py" "${APPDIR}"
 cp "${ROOT}/packaging/linux/dlsite-secret-tool" "${APPDIR}/usr/bin/dlsite-secret-tool"
 chmod +x "${APPDIR}/usr/bin/dlsite-secret-tool"
 # Bundle the official static Linux decoder; SteamOS needs no package-manager changes.
-SEVEN_DIR="${ROOT}/artifacts/7zip-linux"
+SEVEN_VERSION="26.06"
+SEVEN_DIR="${ROOT}/artifacts/7zip-linux/${SEVEN_VERSION}"
 mkdir -p "${SEVEN_DIR}"
-SEVEN_ARCHIVE="${SEVEN_DIR}/7zip.tar.xz"
+SEVEN_ARCHIVE="${SEVEN_DIR}/7z${SEVEN_VERSION/./}-linux-x64.tar.xz"
 if [[ ! -f "${SEVEN_ARCHIVE}" ]]; then
-  curl --fail --location --retry 2 "https://github.com/ip7z/7zip/releases/download/26.04/7z2604-linux-x64.tar.xz" -o "${SEVEN_ARCHIVE}"
+  curl --fail --location --retry 2 "https://github.com/ip7z/7zip/releases/download/${SEVEN_VERSION}/${SEVEN_ARCHIVE##*/}" -o "${SEVEN_ARCHIVE}"
 fi
-echo "fc0327ba27e89bd086cf426dff17d77de582953cdbbc10a6576540a06853ffcd  ${SEVEN_ARCHIVE}" | sha256sum --check --status
+echo "2b539cf067b2ad48e1baa5093dbaa8818b73542d1222a0ffde9dc5f2922ea62e  ${SEVEN_ARCHIVE}" | sha256sum --check --status
 tar -xf "${SEVEN_ARCHIVE}" -C "${SEVEN_DIR}"
 cp "${SEVEN_DIR}/7zzs" "${APPDIR}/usr/bin/7zz"
 chmod +x "${APPDIR}/usr/bin/7zz"
@@ -71,13 +72,14 @@ echo "    To wrap with appimagetool (if installed):"
 echo "    appimagetool \"${APPDIR}\" \"${ROOT}/artifacts/appimage/DlsiteClient-linux-x64.AppImage\""
 
 if ! command -v appimagetool >/dev/null 2>&1; then
-  TOOL_DIR="${ROOT}/artifacts/build-tools"
+  APPIMAGETOOL_VERSION="1.9.1"
+  TOOL_DIR="${ROOT}/artifacts/build-tools/appimagetool/${APPIMAGETOOL_VERSION}"
   mkdir -p "$TOOL_DIR"
   TOOL="$TOOL_DIR/appimagetool.AppImage"
   if [[ ! -f "$TOOL" ]]; then
-    curl --fail --location --retry 2 https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -o "$TOOL"
+    curl --fail --location --retry 2 "https://github.com/AppImage/appimagetool/releases/download/${APPIMAGETOOL_VERSION}/appimagetool-x86_64.AppImage" -o "$TOOL"
   fi
-  echo "95cbe7cce9717fce90c484e34052ee7c7f1d7635b33c12525b4776826a7d29b6  $TOOL" | sha256sum --check --status
+  echo "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  $TOOL" | sha256sum --check --status
   chmod +x "$TOOL"
   (cd "$TOOL_DIR" && "$TOOL" --appimage-extract >/dev/null)
   APPIMAGE_TOOL="$TOOL_DIR/squashfs-root/AppRun"
