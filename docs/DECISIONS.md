@@ -1,8 +1,10 @@
 # Decisions (ADR)
 
-## ADR-001: Stack = Avalonia.FuncUI F# + C# Core + .NET 10 AOT
+## ADR-001: Stack = Avalonia.FuncUI F# + C# Core + .NET 11 AOT
 
 - **Status:** Accepted
+- **2026-11-23 update:** Use the stable .NET 11 SDK for development, CI and publishing. Target `net11.0-windows` for the Windows app and `net11.0` for Linux. Align Microsoft.Extensions, Microsoft.Data.Sqlite and Serilog.Extensions.Logging on 11.0.0, and use Avalonia 12.1.6 with WebView 12.1.2 and FuncUI 2.0.0.
+- Dependabot checks NuGet packages and GitHub Actions weekly. Group Avalonia updates so the app and headless tests can be validated together.
 - **Why:** Cross-platform UI; Nest affinity in C#; FuncUI avoids XAML AOT pain; competitive with Tauri on RAM for dense lists
 - **Versions (2026-10-15):** Avalonia **12.1.4** + FuncUI **2.0.0** + WebView **12.1.1** (MIT) + Material.Avalonia **3.21.0**; Microsoft.Extensions / Sqlite **10.0.13**
 - **AOT smoke (2026-10-15):** **PASS** after VS 2026 C++ Desktop tools. Publish with `vcvars64.bat` then `-p:PublishAot=true -r win-x64`. Output: `artifacts/aot-win-x64/`.
@@ -130,7 +132,7 @@ Direct Proton runtime launches expose the game directory, compatibility data, Pr
 
 ## ADR-022: Compile platform integration by target
 
-Use the SDK WINDOWS symbol for net10.0-windows. Include NestImportPrompt.fs and the Windows platform project only in that target. Compile the matching platform service wiring and Nest settings action with F# preprocessor conditions. The neutral net10.0 app target is the Linux build and references only the Linux platform implementation. Remove its unused Nest importer stub. Shared HTTP authentication and normal local-library discovery remain cross-platform.
+Use the SDK `WINDOWS` symbol for the Windows-specific target. Include NestImportPrompt.fs and the Windows platform project only in that target. Compile the matching platform service wiring and Nest settings action with F# preprocessor conditions. The neutral app target is the Linux build and references only the Linux platform implementation. Shared HTTP authentication and normal local-library discovery remain cross-platform.
 
 ## ADR-023: Tag fallback and game-start tracking
 

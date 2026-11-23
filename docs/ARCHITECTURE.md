@@ -52,7 +52,7 @@ Microsoft.Extensions.Logging + file sink with fixed rotation; user sets level + 
 
 ## Platform compilation
 
-The app target net10.0-windows defines WINDOWS and references the Windows platform project. The neutral net10.0 target is the Linux app and references the Linux platform project. NestImportPrompt.fs is included only for Windows. F# #if WINDOWS blocks control its startup call, settings action, importer service field and registration. The Linux platform has no Nest importer implementation.
+The app target `net11.0-windows` defines `WINDOWS` and references the Windows platform project. The neutral `net11.0` target is the Linux app and references the Linux platform project. NestImportPrompt.fs is included only for Windows. F# #if WINDOWS blocks control its startup call, settings action, importer service field and registration. The Linux platform has no Nest importer implementation.
 
 ## Metadata and launch state
 
