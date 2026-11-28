@@ -92,12 +92,12 @@ let private skeleton (w: float) (h: float) : IView =
     Border.create [
         Border.width w
         Border.height h
-        Border.background "#E5E7EB"
+        Border.background Palette.Outline
         Border.cornerRadius 4.0
         Border.child (
             TextBlock.create [
                 TextBlock.text "…"
-                TextBlock.foreground "#9CA3AF"
+                TextBlock.foreground Palette.InkMuted
                 TextBlock.horizontalAlignment HorizontalAlignment.Center
                 TextBlock.verticalAlignment VerticalAlignment.Center
             ])
@@ -122,7 +122,7 @@ let thumbView (url: string) (w: float) (h: float) : IView =
         Border.create [
             Border.width w
             Border.height h
-            Border.background "#F3F4F6"
+            Border.background Palette.SurfaceMuted
             Border.cornerRadius 4.0
             Border.onPointerPressed (fun e ->
                 e.Handled <- true
@@ -130,7 +130,7 @@ let thumbView (url: string) (w: float) (h: float) : IView =
             Border.child (
                 TextBlock.create [
                     TextBlock.text "!"
-                    TextBlock.foreground "#9CA3AF"
+                    TextBlock.foreground Palette.InkMuted
                     TextBlock.horizontalAlignment HorizontalAlignment.Center
                     TextBlock.verticalAlignment VerticalAlignment.Center
                 ])

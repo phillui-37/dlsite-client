@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 
 namespace DlsiteClient.Core.Api;
@@ -16,7 +16,9 @@ public static class NestOidc
 
     public static Uri RedirectUri { get; } = new(DlsiteApiClient.ApiBase + RedirectPath);
 
-    public static Uri BuildAuthorizeUri(string lang = "ja")
+    public static Uri BuildAuthorizeUri(string lang = "ja") => BuildAuthorizeUri(lang, out _);
+
+    public static Uri BuildAuthorizeUri(string lang, out string state)
     {
         var sb = new StringBuilder();
         sb.Append(DlsiteApiClient.LoginBase.TrimEnd('/'));
@@ -28,16 +30,22 @@ public static class NestOidc
         Append(sb, "scope", Scope);
         Append(sb, "redirect_uri", RedirectUri.ToString());
         Append(sb, "nonce", RandomAlphaNum(6));
-        Append(sb, "state", RandomAlphaNum(12));
+        state = RandomAlphaNum(12);
+        Append(sb, "state", state);
         return new Uri(sb.ToString());
     }
 
-    public static bool TryParseCallback(Uri? callback, out string idToken, out string state, out string sessionState)
+    public static bool TryParseCallback(Uri? callback, string expectedState, out string idToken, out string state, out string sessionState)
     {
         idToken = "";
         state = "";
         sessionState = "";
         if (callback is null) return false;
+        if (!string.Equals(callback.Scheme, RedirectUri.Scheme, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(callback.Host, RedirectUri.Host, StringComparison.OrdinalIgnoreCase)
+            || callback.Port != RedirectUri.Port
+            || !string.Equals(callback.AbsolutePath, RedirectUri.AbsolutePath, StringComparison.Ordinal))
+            return false;
 
         var fragment = callback.Fragment;
         if (string.IsNullOrEmpty(fragment) || fragment.Length < 2)
@@ -47,7 +55,8 @@ public static class NestOidc
         idToken = map.GetValueOrDefault("id_token", "");
         state = map.GetValueOrDefault("state", "");
         sessionState = map.GetValueOrDefault("session_state", "");
-        return idToken.Length > 0 && state.Length > 0 && sessionState.Length > 0;
+        return idToken.Length > 0 && state.Length > 0 && sessionState.Length > 0
+            && string.Equals(state, expectedState, StringComparison.Ordinal);
     }
 
     private static void Append(StringBuilder sb, string key, string value, bool first = false)

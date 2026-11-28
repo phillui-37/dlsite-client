@@ -13,3 +13,5 @@ artifacts/
 .idea/
 *.user
 *.DotSettings.user
+.alma-snapshots
+.alma/

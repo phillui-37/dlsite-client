@@ -38,6 +38,16 @@ Directory.CreateDirectory(root);
 int passed = 0;
 void Check(bool ok, string label) { if (!ok) throw new Exception(label); passed++; Console.WriteLine("PASS " + label); }
 void Write(string path, string text) { Directory.CreateDirectory(Path.GetDirectoryName(path)!); File.WriteAllText(path, text); }
+var authorizeUri = NestOidc.BuildAuthorizeUri("ja", out var expectedOidcState);
+var callbackWithExpectedState = new Uri(NestOidc.RedirectUri + "#id_token=test-token&state=" + Uri.EscapeDataString(expectedOidcState) + "&session_state=session");
+var callbackWithWrongState = new Uri(NestOidc.RedirectUri + "#id_token=test-token&state=attacker-state&session_state=session");
+var callbackOnWrongPath = new Uri(NestOidc.RedirectUri.GetLeftPart(UriPartial.Authority) + "/wrong-callback#id_token=test-token&state=" + Uri.EscapeDataString(expectedOidcState) + "&session_state=session");
+Check(authorizeUri.Query.Contains("state=" + expectedOidcState, StringComparison.Ordinal), "OIDC authorize URI exposes generated state for callback validation");
+Check(NestOidc.TryParseCallback(callbackWithExpectedState, expectedOidcState, out _, out _, out _), "OIDC callback accepts matching state");
+Check(!NestOidc.TryParseCallback(callbackWithWrongState, expectedOidcState, out _, out _, out _), "OIDC callback rejects mismatched state");
+Check(!NestOidc.TryParseCallback(callbackWithExpectedState, "", out _, out _, out _), "OIDC callback rejects missing expected state");
+Check(!NestOidc.TryParseCallback(callbackOnWrongPath, expectedOidcState, out _, out _, out _), "OIDC callback rejects a different redirect path");
+
 var install = Path.Combine(root, "installed");
 Write(Path.Combine(install, "game.exe"), "old-game");
 Write(Path.Combine(install, "save", "slot1.dat"), "user-save");

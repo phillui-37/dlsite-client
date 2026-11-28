@@ -58,10 +58,14 @@ The app target `net11.0-windows` defines `WINDOWS` and references the Windows pl
 
 LibraryService bounds missing-tag fetches to four behind a semaphore, deduplicates in-flight work and caches successful/failed attempts and writes only tags_json through a separate SQLite connection. JSON genres precede product-page genre links. Library and detail subscribe to metadata changes. The tag filter starts background library backfill; the detail page requests its own missing tags.
 
-LauncherService owns Preparing / Starting / Running / Failed state and emits Changed. Process checks run off the UI thread. An executable-path file lease excludes another instance until process exit or start timeout. IGameProcesses supports isolated tests; the real implementation checks process names and module paths, or Wine argv paths. The UI shows the existing Material circular ProgressBar while preparing/starting.
+LauncherService owns Preparing / Starting / Running / Failed state and emits Changed. Process checks run off the UI thread. An executable-path file lease excludes another instance until process exit or start timeout. IGameProcesses supports isolated tests; the real implementation checks process names and module paths, or Wine argv paths. The UI shows a Simple-themed indeterminate ProgressBar while preparing/starting.
 
 ## Local CI runners
 
 GitHub Actions uses a Windows runner on the build PC and a Linux runner inside its VMware SteamOS VM. AppImage packaging uses an Ubuntu 24.04 chroot in that VM. The Windows job starts the prepared VM and its runner through the existing serial command agent. Each runner uses a separate checkout. Tag releases run only after both jobs pass.
 
 Tag queries reuse an in-memory per-work parsed set keyed by the current tags JSON. The library view coalesces service notifications on a 100 ms dispatcher timer and limits tag-choice controls to batches of 60; searching still covers all cached tags.
+
+## Wabi-sabi presentation
+
+Avalonia Simple supplies control templates. App.fs maps the semantic Palette.fs colors to shared brushes and Simple theme resource keys; WabiSabi.fs defines Avalonia styles through typed F# selectors and properties, installed alongside the existing FuncUI views. Work rows/cards remain keyed by Workno, expose accessible names, and accept keyboard activation. Detail tags have their own bounded scroll area. No AXAML resources or Material dependency remain.

@@ -68,10 +68,12 @@
 - **UI thread:** call `AuthenticateAsync` without blocking (no `.GetResult()` / `.Wait()` on the UI thread). Blocking opens an empty login window and freezes the app — the broker needs the dispatcher to paint and navigate.
 - Manual SID login kept as debug fallback only.
 
-## ADR-014: UI theme = Material.Avalonia
+## ADR-014: UI theme = Avalonia Simple with wabi-sabi palette
 
-- **Status:** Accepted
-- Package: `Material.Avalonia` 3.21.0 — Light / Primary Blue / Secondary Teal (not Fluent)
+- **Status:** Accepted (supersedes Material.Avalonia; 2026-11-07)
+- Foundation: Avalonia.Themes.Simple 12.1.4. Keep FuncUI and Avalonia 12.1.4.
+- Use a centralized semantic palette and app styles: warm paper/stone surfaces, charcoal ink, clay primary actions and moss secondary/status accents. Keep visible hover, pressed, selected, disabled and keyboard-focus states with accessible contrast.
+- No remote fonts, generated artwork, fake texture or decorative damage. Retain bundled/system font fallback and the ja/zh-TW locales.
 
 ## ADR-015: Japan locale launch = soft env hint
 
@@ -107,9 +109,9 @@
 
 ## ADR-019: Compact library shell
 
-- Keep Material.Avalonia and the locked stack. Use a dark navigation rail with light content surfaces and blue actions.
-- Keep controls usable at 1280 × 800 (Steam Deck desktop). Advanced filters start collapsed.
-- Share horizontal scrolling between table header and rows.
+- Keep the warm paper/stone surfaces, charcoal navigation rail, clay primary actions and moss secondary accents defined by ADR-014.
+- Keep controls usable at 960px minimum window width (Steam Deck desktop target). Advanced filters start collapsed.
+- Let library toolbar controls wrap; retain shared horizontal scrolling between table header and rows.
 
 ## ADR-020: Keep installed data during updates
 
@@ -138,7 +140,7 @@ Use the SDK `WINDOWS` symbol for the Windows-specific target. Include NestImport
 
 Use the work's store section for public product.json. Parse genres first, then only genre links in product HTML main_genre blocks. This small parser uses bounded regex operations and no new runtime package. Missing, blocked or invalid metadata leaves tags blank. A semaphore serializes requests; successful and empty results are cached for the session. Persist only tags_json so an asynchronous metadata response cannot replace installation state.
 
-Use LauncherService state events for the circular start indicator. Match the selected executable by process name and path, including Wine argv paths. A file lease keyed by executable path prevents another app instance from starting the same target. Retain the lease until process exit or the three-minute detection timeout. Process monitoring uses IGameProcesses for deterministic tests. This does not infer a different executable spawned by a bootstrap launcher, and process detection does not imply window readiness.
+Use LauncherService state events for the indeterminate start indicator. Match the selected executable by process name and path, including Wine argv paths. A file lease keyed by executable path prevents another app instance from starting the same target. Retain the lease until process exit or the three-minute detection timeout. Process monitoring uses IGameProcesses for deterministic tests. This does not infer a different executable spawned by a bootstrap launcher, and process detection does not imply window readiness.
 
 ## ADR-024: Linux credential-helper early exit
 

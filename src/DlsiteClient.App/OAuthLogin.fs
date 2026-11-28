@@ -30,7 +30,8 @@ let loginAsync (svc: AppServices) : Task<string> =
             let lang =
                 let ui = svc.Settings.Current.UiLocale
                 if ui = "zh-TW" then "zh_TW" else "ja"
-            let request = NestOidc.BuildAuthorizeUri(lang)
+            let mutable expectedState = ""
+            let request = NestOidc.BuildAuthorizeUri(lang, &expectedState)
             let options =
                 WebAuthenticatorOptions(
                     request,
@@ -44,7 +45,7 @@ let loginAsync (svc: AppServices) : Task<string> =
                     let mutable idToken = ""
                     let mutable state = ""
                     let mutable sessionState = ""
-                    if NestOidc.TryParseCallback(callback, &idToken, &state, &sessionState) then
+                    if NestOidc.TryParseCallback(callback, expectedState, &idToken, &state, &sessionState) then
                         do! svc.Auth.LoginWithOidcAsync(idToken, state, sessionState)
                         return "ok"
                     else
