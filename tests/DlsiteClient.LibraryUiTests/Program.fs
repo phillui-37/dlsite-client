@@ -356,15 +356,69 @@ for locale in [ "ja"; "zh-TW" ] do
             pump ()
             capture (locale + "-detail-" + string width)
 
-// Regression: paging past page 2 (including when catalog grows after initial mount),
-// preserving Library filters/search/sort/page/disclosure across page transitions and
-// Download/Update routing in MainView, and Update all button behavior.
+
+// Restore the Downloads fixture's original locale after the render coverage.
 Localization.globalI18n.Load("ja", Path.GetFullPath "locales")
-Services.shared.Value.Downloads.PauseForAuth()
-let headingExists key count =
-    let expected = String.Format("{0} ({1})", Localization.t key, count)
-    descendants () |> List.exists (function :? TextBlock as tb -> tb.Text = expected | _ -> false)
+
+// Downloads queue UI. Seed persisted jobs, rebuild the queue service from the isolated database,
+// and hold the auth pause so the pump never starts a real download.
+let seedJob workno name state order =
+    DownloadJob(Workno = workno, WorkName = name, State = state, QueueOrder = order,
+                BytesDownloaded = 123L, BytesTotal = 456L, ProgressPercent = 42.0)
+db.SaveDownloadJobs([|
+    seedJob "RJ900" "DL-PAUSED-A" DownloadJobState.Paused 0
+    seedJob "RJ901" "DL-PAUSED-B" DownloadJobState.Paused 1
+    seedJob "RJ902" "DL-DONE" DownloadJobState.Completed 2
+    seedJob "RJ903" "DL-FAILED" DownloadJobState.Failed 3
+    seedJob "RJ904" "DL-CORRUPT" DownloadJobState.CorruptArchive 4 |])
+let dlQueue = Microsoft.Extensions.DependencyInjection.ActivatorUtilities.CreateInstance<DownloadQueueService>(provider)
+dlQueue.PauseForAuth()
+Services.shared <- Some { Services.shared.Value with Downloads = dlQueue }
+window.Content <- Views.DownloadsView.view ()
+pump ()
+let textExists pred = descendants () |> List.exists (function :? TextBlock as tb -> pred tb.Text | _ -> false)
+let headingText key count = String.Format("{0} ({1})", Localization.t key, count)
+let headingExists key count = textExists (fun s -> s = headingText key count)
+let buttonCount key = buttons () |> List.filter (fun b -> string b.Content = Localization.t key) |> List.length
 let dbJobs () = [ for j in db.LoadDownloadJobs() -> j ]
+assertUi (headingExists "downloads.active" 0) "downloads renders the Active section card"
+assertUi (headingExists "downloads.upNext" 2) "downloads groups paused jobs under Up Next"
+assertUi (headingExists "downloads.completed" 3) "downloads groups finished, failed and corrupt jobs under Completed"
+assertUi (textExists (fun s -> s = Localization.t "downloads.empty")) "empty Active section shows the localized empty state"
+assertUi (buttonCount "downloads.moveUp" = 2 && buttonCount "downloads.moveDown" = 2) "Up Next rows expose reorder actions"
+assertUi (buttonCount "downloads.resume" = 3 && buttonCount "downloads.redownload" = 1 && buttonCount "downloads.openLibrary" = 1) "row actions match each job state"
+assertUi (descendants () |> List.filter (function :? TextBlock as tb -> (isNull >> not) tb.Text && tb.Text.Contains(Localization.t "downloads.state.paused") | _ -> false) |> List.length = 2) "paused rows show the localized paused state"
+assertUi (textExists (fun s -> s.Contains(Localization.t "downloads.corruptArchive"))) "corrupt row shows the localized corrupt state"
+assertUi (textExists (fun s -> s = Localization.t "auth.queuePaused")) "auth pause banner is visible in the downloads heading"
+click (buttons () |> List.find (fun b -> string b.Content = Localization.t "downloads.resume"))
+pump ()
+assertUi ((dbJobs () |> List.find (fun j -> j.Workno = "RJ900")).State = DownloadJobState.Queued) "per-row resume requeues that paused job"
+assertUi (headingExists "downloads.upNext" 2) "requeued job stays visible under Up Next while the pump is gated"
+click (buttons () |> List.filter (fun b -> string b.Content = Localization.t "downloads.moveUp") |> List.item 1)
+pump ()
+let movedOrder = dbJobs () |> List.map (fun j -> j.Workno) |> List.filter (fun w -> w.StartsWith "RJ90")
+assertUi (movedOrder = [ "RJ901"; "RJ900"; "RJ902"; "RJ903"; "RJ904" ]) "move up persists the new queue order"
+let resumeAllBtn () = buttons () |> List.find (fun b -> string b.Content = Localization.t "downloads.resumeAll")
+assertUi (resumeAllBtn().IsEnabled) "Resume all is enabled while a paused job exists"
+click (resumeAllBtn ())
+pump ()
+assertUi ((dbJobs () |> List.find (fun j -> j.Workno = "RJ903")).State = DownloadJobState.Queued) "resume all requeues the failed job"
+assertUi (headingExists "downloads.upNext" 3 && headingExists "downloads.completed" 2) "resume all moves failed jobs out of Completed"
+assertUi (not (resumeAllBtn().IsEnabled)) "Resume all disables with nothing paused or failed"
+click (byLabel "downloads.openLibrary")
+assertUi ((provider.GetRequiredService<IShell>() :?> RecordingShell).Opened = settings.Current.LibraryDirectory) "completed row opens the configured library directory"
+click (byLabel "downloads.redownload")
+pump ()
+assertUi ((dbJobs () |> List.find (fun j -> j.Workno = "RJ904")).State = DownloadJobState.CorruptArchive) "corrupt redownload waits for confirmation"
+click (byLabel "downloads.clearAll")
+pump ()
+assertUi (headingExists "downloads.completed" 0) "clear completed empties the Completed card"
+assertUi (descendants () |> List.filter (function :? TextBlock as tb -> tb.Text = Localization.t "downloads.empty" | _ -> false) |> List.length = 2) "cleared sections show the localized empty state"
+assertUi (List.length (dbJobs ()) = 3) "clear completed persists the removal"
+
+// Regression: paging past page 2 (including when catalog grows after initial mount) and
+// preserving Library filters, search, sort, page, and disclosure across page transitions
+// and Download/Update routing in MainView.
 let extraWorks =
     [ for i in 26..65 ->
         WorkItem(Workno = "RJ" + i.ToString("D3"), WorkName = "WORK-" + i.ToString("D3"),
