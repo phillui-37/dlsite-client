@@ -2,18 +2,18 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <Version>0.1.2</Version>
-    <TargetFrameworks>net10.0-windows;net10.0</TargetFrameworks>
+    <TargetFrameworks>net11.0-windows;net11.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <!-- Windows AOT by default; Linux defaults to trimmed self-contained (override with -p:PublishAot=). -->
-    <PublishAot Condition="'$(PublishAot)' == '' and '$(TargetFramework)' == 'net10.0-windows'">true</PublishAot>
-    <PublishAot Condition="'$(PublishAot)' == '' and '$(TargetFramework)' == 'net10.0'">false</PublishAot>
+    <PublishAot Condition="'$(PublishAot)' == '' and '$(TargetFramework)' == 'net11.0-windows'">true</PublishAot>
+    <PublishAot Condition="'$(PublishAot)' == '' and '$(TargetFramework)' == 'net11.0'">false</PublishAot>
     <PublishTrimmed>true</PublishTrimmed>
     <TrimMode>partial</TrimMode>
     <InvariantGlobalization>false</InvariantGlobalization>
     <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
     <RootNamespace>DlsiteClient.App</RootNamespace>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net11.0-windows'">
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
@@ -25,7 +25,7 @@
     <Compile Include="Services.fs" />
     <Compile Include="ThumbCache.fs" />
     <Compile Include="OAuthLogin.fs" />
-    <Compile Include="NestImportPrompt.fs" Condition="'$(TargetFramework)' == 'net10.0-windows'" />
+    <Compile Include="NestImportPrompt.fs" Condition="'$(TargetFramework)' == 'net11.0-windows'" />
     <Compile Include="Views/LibraryView.fs" />
     <Compile Include="Views/DownloadsView.fs" />
     <Compile Include="Views/SettingsView.fs" />
@@ -37,20 +37,20 @@
   <ItemGroup>
     <ProjectReference Include="..\DlsiteClient.Core\DlsiteClient.Core.csproj" />
     <ProjectReference Include="..\DlsiteClient.Platform\DlsiteClient.Platform.csproj" />
-    <ProjectReference Include="..\DlsiteClient.Platform.Windows\DlsiteClient.Platform.Windows.csproj" Condition="'$(TargetFramework)' == 'net10.0-windows'" />
-    <ProjectReference Include="..\DlsiteClient.Platform.Linux\DlsiteClient.Platform.Linux.csproj" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <ProjectReference Include="..\DlsiteClient.Platform.Windows\DlsiteClient.Platform.Windows.csproj" Condition="'$(TargetFramework)' == 'net11.0-windows'" />
+    <ProjectReference Include="..\DlsiteClient.Platform.Linux\DlsiteClient.Platform.Linux.csproj" Condition="'$(TargetFramework)' == 'net11.0'" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="12.1.4" />
-    <PackageReference Include="Avalonia.Controls.WebView" Version="12.1.1" />
-    <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.4" />
+    <PackageReference Include="Avalonia" Version="12.1.6" />
+    <PackageReference Include="Avalonia.Controls.WebView" Version="12.1.2" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.6" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.6" />
     <PackageReference Include="Avalonia.FuncUI" Version="2.0.0" />
-    <PackageReference Include="Avalonia.Themes.Simple" Version="12.1.4" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.13" />
+    <PackageReference Include="Avalonia.Themes.Simple" Version="12.1.6" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="11.0.0" />
     <PackageReference Include="Serilog" Version="4.4.0" />
-    <PackageReference Include="Serilog.Extensions.Logging" Version="10.0.0" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="11.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
   </ItemGroup>
   <ItemGroup>
