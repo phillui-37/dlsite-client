@@ -41,10 +41,10 @@
     <ProjectReference Include="..\DlsiteClient.Platform.Linux\DlsiteClient.Platform.Linux.csproj" Condition="'$(TargetFramework)' == 'net11.0'" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="12.1.6" />
+    <PackageReference Include="Avalonia" Version="12.2.0" />
     <PackageReference Include="Avalonia.Controls.WebView" Version="12.1.2" />
-    <PackageReference Include="Avalonia.Desktop" Version="12.1.6" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.6" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.2.0" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.2.0" />
     <PackageReference Include="Avalonia.FuncUI" Version="2.0.0" />
     <PackageReference Include="Avalonia.Themes.Simple" Version="12.1.6" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0" />
