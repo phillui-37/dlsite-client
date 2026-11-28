@@ -313,8 +313,13 @@ for locale in [ "ja"; "zh-TW" ] do
         window.Height <- 800.
         window.Content <- Views.MainView.view ()
         pump ()
-        for key in [ "library.mode.list"; "library.mode.grid"; "library.mode.hybrid"; "library.filters" ] do
-            let button = byLabel key
+        for key in [ "library.mode.list"; "library.mode.grid"; "library.mode.hybrid"; "library.filters"; "library.action.updateAll" ] do
+            let button =
+                if key <> "library.action.updateAll" then byLabel key
+                else
+                    let format = Localization.t key
+                    let prefix = format.Substring(0, format.IndexOf("{0}", StringComparison.Ordinal))
+                    buttons () |> List.find (fun b -> (string b.Content).StartsWith(prefix, StringComparison.Ordinal))
             let point = button.TranslatePoint(Point(0., 0.), window).Value
             assertUi (point.X >= 176. && point.X + button.Bounds.Width <= width && point.Y >= 0. && point.Y + button.Bounds.Height <= 800.)
                 (locale + " " + string width + " " + key + " stays inside window")
@@ -350,6 +355,157 @@ for locale in [ "ja"; "zh-TW" ] do
             window.KeyRelease(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "\r")
             pump ()
             capture (locale + "-detail-" + string width)
+
+// Regression: paging past page 2 (including when catalog grows after initial mount),
+// preserving Library filters/search/sort/page/disclosure across page transitions and
+// Download/Update routing in MainView, and Update all button behavior.
+Localization.globalI18n.Load("ja", Path.GetFullPath "locales")
+Services.shared.Value.Downloads.PauseForAuth()
+let headingExists key count =
+    let expected = String.Format("{0} ({1})", Localization.t key, count)
+    descendants () |> List.exists (function :? TextBlock as tb -> tb.Text = expected | _ -> false)
+let dbJobs () = [ for j in db.LoadDownloadJobs() -> j ]
+let extraWorks =
+    [ for i in 26..65 ->
+        WorkItem(Workno = "RJ" + i.ToString("D3"), WorkName = "WORK-" + i.ToString("D3"),
+                 RegistDate = DateTime(2026,1,1).AddDays(float i).ToString("yyyy-MM-dd"),
+                 TagsJson = (if i % 2 = 0 then "[\"school\"]" else "[\"school uniform\"]"),
+                 IsDownloaded = true, LocalUpdateDate = "2025-01-01", UpdateDate = if i % 2 = 0 then "2026-01-01" else "2024-01-01") ]
+let fullCatalog = works @ extraWorks
+let rowsIn (catalog: WorkItem list) =
+    descendants () |> List.choose (function
+        | :? CheckBox as cb when cb.Content = null ->
+            let mutable parent = cb.GetLogicalParent()
+            let mutable title = ""
+            while parent <> null && title = "" do
+                match parent with
+                | :? Border as border ->
+                    let text = textOf border
+                    if text.Contains "WORK-" then title <- catalog |> List.find (fun w -> text.Contains w.WorkName) |> fun w -> w.Workno
+                | _ -> ()
+                parent <- parent.GetLogicalParent()
+            if title = "" then None else Some(title, cb)
+        | _ -> None)
+let hasPageLabel p totalPages =
+    let expected = Fmt.fmt2 (Localization.t "library.pageOf") p totalPages
+    descendants () |> List.exists (function :? TextBlock as tb -> tb.Text = expected | _ -> false)
+
+settings.Update(fun s -> s.ViewMode <- LibraryViewMode.List; s.LibraryPageSize <- 20)
+window.Width <- 1600.
+window.Height <- 1000.
+window.Content <- Views.MainView.view ()
+pump ()
+// Grow catalog AFTER initial mount and trigger an in-place re-render (same pager Button instances)
+// to prove pager does not freeze initial pageCount or pageIdx.
+db.UpsertWorks extraWorks
+library.Reload()
+click (byLabel "library.mode.list")
+assertUi (hasPageLabel 1 4) "multi-page catalog starts on page 1/4"
+let p1Ids = rowsIn fullCatalog |> List.map fst |> Set.ofList
+click (byLabel "library.next")
+assertUi (hasPageLabel 2 4) "next advances from page 1 to page 2/4"
+let p2Ids = rowsIn fullCatalog |> List.map fst |> Set.ofList
+click (byLabel "library.next")
+assertUi (hasPageLabel 3 4) "next advances from page 2 to page 3/4"
+let p3Ids = rowsIn fullCatalog |> List.map fst |> Set.ofList
+click (byLabel "library.next")
+assertUi (hasPageLabel 4 4) "next advances from page 3 to page 4/4"
+let p4Ids = rowsIn fullCatalog |> List.map fst |> Set.ofList
+assertUi (p1Ids.Count = 20 && p2Ids.Count = 20 && p3Ids.Count = 20 && p4Ids.Count = 5) "all four pages show expected work counts"
+assertUi ((Set.unionMany [ p1Ids; p2Ids; p3Ids; p4Ids ]).Count = 65) "pages 1 through 4 show pairwise disjoint works"
+click (byLabel "library.prev")
+assertUi (hasPageLabel 3 4 && (rowsIn fullCatalog |> List.map fst |> Set.ofList) = p3Ids) "prev returns from page 4 to page 3/4"
+click (byLabel "library.prev")
+assertUi (hasPageLabel 2 4 && (rowsIn fullCatalog |> List.map fst |> Set.ofList) = p2Ids) "prev returns from page 3 to page 2/4"
+click (byLabel "library.prev")
+assertUi (hasPageLabel 1 4 && (rowsIn fullCatalog |> List.map fst |> Set.ofList) = p1Ids) "prev returns from page 2 to page 1/4"
+
+// Apply filters, sort, and page 2 inside MainView, then verify persistence across navigation and Download/Update routing.
+ensureFiltersOpen ()
+userToggle (updatesBox ())
+click (buttons () |> List.find (fun b -> string b.Content = Localization.t "library.col.title"))
+click (byLabel "library.next")
+assertUi (hasPageLabel 2 2) "filtered updates catalog reaches page 2/2"
+let filteredPage2Ids = rowsIn fullCatalog |> List.map fst
+assertUi (filteredPage2Ids.Length = 12 && filteredPage2Ids |> List.forall (fun id -> (fullCatalog |> List.find (fun w -> w.Workno = id)).HasUpdate)) "filtered page 2 shows remaining 12 outdated works"
+let expectedBadge = (Localization.t "library.filters.count").Replace("{0}", "1")
+assertUi (string (byLabel "library.filters").Content = expectedBadge) "filter badge reflects updates filter before navigation"
+
+let assertFilteredStatePreserved context =
+    assertUi (string (byLabel "library.filters").Content = expectedBadge) (context + " preserves active filter count")
+    assertUi (filtersOpen ()) (context + " preserves open filter disclosure")
+    assertUi ((updatesBox ()).IsChecked = Nullable true) (context + " preserves updates filter checkbox")
+    assertUi (hasPageLabel 2 2) (context + " preserves current page 2/2")
+    assertUi ((rowsIn fullCatalog |> List.map fst) = filteredPage2Ids) (context + " preserves filtered and sorted page rows")
+
+click (byLabel "nav.settings")
+click (byLabel "nav.library")
+assertFilteredStatePreserved "Settings -> Library"
+
+click (byLabel "nav.downloads")
+click (byLabel "nav.library")
+assertFilteredStatePreserved "Downloads -> Library"
+
+let firstFilteredCard = descendants () |> List.pick (function :? Border as b when b.Classes.Contains("work") -> Some b | _ -> None)
+assertUi (firstFilteredCard.Focus(NavigationMethod.Tab)) "filtered row focuses to open detail"
+window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "\r")
+window.KeyRelease(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "\r")
+pump ()
+click (byLabel "common.back")
+assertFilteredStatePreserved "Detail -> Library"
+
+// Trigger per-row Update action (routes to Downloads) and return to Library.
+click (buttons () |> List.find (fun b -> string b.Content = Localization.t "library.action.update" && not (b.Classes.Contains "table-heading")))
+assertUi (headingExists "downloads.active" 0) "row update routes to Downloads page"
+click (byLabel "nav.library")
+assertFilteredStatePreserved "Row Update -> Downloads -> Library"
+
+// Apply search + tag filter + batch Download (routes to Downloads) and return to Library.
+let navSearchBox () = descendants () |> List.pick (function :? TextBox as tb when string tb.PlaceholderText = Localization.t "library.search" -> Some tb | _ -> None)
+(navSearchBox ()).Text <- "WORK-04"; pump ()
+click (buttons () |> List.find (fun b -> (string b.Content).EndsWith(Localization.t "library.tagFilter")))
+userToggle (tagBox "school")
+let searchTagIds = rowsIn fullCatalog |> List.map fst
+assertUi (searchTagIds.Length = 11 && List.contains "RJ042" searchTagIds && not (List.contains "RJ002" searchTagIds)) "search + updates + school tag narrows to 11 matching works"
+let firstSearchRowId, firstSearchRowBox = rowsIn fullCatalog |> List.head
+userToggle firstSearchRowBox
+click (buttons () |> List.find (fun b ->
+    string b.Content = Localization.t "library.action.download"
+    && not (b.Classes.Contains "nav")
+    && not (b.Classes.Contains "table-heading")))
+assertUi (headingExists "downloads.active" 0 && dbJobs () |> List.exists (fun j -> j.Workno = firstSearchRowId)) "batch download enqueues work and routes to Downloads page"
+click (byLabel "nav.library")
+assertUi ((navSearchBox ()).Text = "WORK-04") "batch Download -> Library preserves search text"
+assertUi (string (byLabel "library.filters").Content = (Localization.t "library.filters.count").Replace("{0}", "2")) "batch Download -> Library preserves updates + tag filter count"
+assertUi ((rowsIn fullCatalog |> List.map fst) = searchTagIds) "batch Download -> Library preserves filtered rows"
+assertUi ((rowsIn fullCatalog |> List.find (fun (id, _) -> id = firstSearchRowId) |> snd).IsChecked = Nullable true) "batch Download -> Library preserves selection"
+
+// Regression: Update all button queues all updatable works matching current filters across pages,
+// updates its live count, disables at 0, and preserves Library state when returning from Downloads.
+let updateAllBtn () =
+    let format = Localization.t "library.action.updateAll"
+    let prefix = format.Substring(0, format.IndexOf("{0}", StringComparison.Ordinal))
+    buttons () |> List.find (fun b -> (string b.Content).StartsWith(prefix, StringComparison.Ordinal))
+assertUi (string (updateAllBtn ()).Content = Fmt.fmt1 (Localization.t "library.action.updateAll") 11 && (updateAllBtn ()).IsEnabled) "Update all reflects live filtered updatable count (11)"
+click (updateAllBtn ())
+assertUi (headingExists "downloads.active" 0) "Update all routes to Downloads page"
+let queuedFiltered = dbJobs () |> List.filter (fun j -> List.contains j.Workno searchTagIds)
+let queuedFilteredUpdates = queuedFiltered |> List.filter (fun j -> j.IsUpdate)
+assertUi (queuedFiltered.Length = 11 && queuedFilteredUpdates.Length = 10) "Update all enqueues remaining 10 filtered updatable works with IsUpdate without duplicating queued work"
+click (byLabel "nav.library")
+assertUi ((navSearchBox ()).Text = "WORK-04" && (rowsIn fullCatalog |> List.map fst) = searchTagIds) "Update all -> Library preserves search and filtered rows"
+
+// Clear search/filters so all 32 updatable works across 2+ pages are available; verify Update all queues all 32.
+(navSearchBox ()).Text <- ""; pump ()
+click (buttons () |> List.find (fun b -> string b.Content = Localization.t "library.filters.reset"))
+assertUi (string (updateAllBtn ()).Content = Fmt.fmt1 (Localization.t "library.action.updateAll") 32 && (updateAllBtn ()).IsEnabled) "Update all shows all 32 updatable works across all pages"
+click (updateAllBtn ())
+let allQueuedOutdated = dbJobs () |> List.filter (fun j -> fullCatalog |> List.exists (fun w -> w.Workno = j.Workno && w.HasUpdate))
+assertUi (allQueuedOutdated.Length = 32 && (allQueuedOutdated |> List.filter (fun j -> j.IsUpdate) |> List.length) = 31) "Update all enqueues all 32 outdated works across pages without duplicates"
+click (byLabel "nav.library")
+// When filtered to 0 updatable works, Update all disables with count 0.
+(navSearchBox ()).Text <- "WORK-001"; pump ()
+assertUi (string (updateAllBtn ()).Content = Fmt.fmt1 (Localization.t "library.action.updateAll") 0 && not (updateAllBtn ()).IsEnabled) "Update all disables when 0 updatable works match"
 
 window.Close()
 Services.shared <- None

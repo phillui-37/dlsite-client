@@ -61,6 +61,7 @@
   "library.action.selectWork": "選取作品",
   "library.action.download": "下載",
   "library.action.update": "更新",
+  "library.action.updateAll": "全部更新 ({0})",
   "library.action.uninstall": "解除安裝",
   "library.action.favorite": "最愛",
   "library.action.unfavorite": "取消最愛",

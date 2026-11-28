@@ -10,7 +10,9 @@ Clean-room Nest replacement for library management only. Windows and Linux suppo
 - Modes: list (selectable sortable columns), grid (thumb + title), hybrid
 - Columns: purchase date, title+thumb (fixed), maker, work format, store rating as text `x/5` (default `0/5`, no stars), sales date, download flag only, extract size separate; **no Viewer**
 - **Paging:** default page size 20; user may choose 50 or 100
+- Preserve library filters, search, tags, sort, page, selection, and filter disclosure state when navigating away and returning. Clamp the current page when result counts or page size change, and allow next/previous navigation through every page.
 - Explicit Update button when update exists (all modes). Update = purchase `update_date` newer than local revision stamp (`LocalUpdateDate`). Our extracts stamp on finish; Nest-imported folders infer stamp from install folder mtime (never assume equal to remote `update_date`).
+- Library header provides an Update all button showing the count of updatable works in the current filtered catalog (across all pages), disabled when zero; clicking it queues all of them as updates and routes to Downloads while preserving Library state.
 - Context menu: install / uninstall / fav / hide
 - Multi-select: batch Download, Update, Uninstall (confirm)
 - Double-click → detail page

@@ -29,6 +29,7 @@ let view () =
             | Some w -> Page.Detail w
             | None -> Page.Library
         let page = ctx.useState initial
+        let libraryState = ctx.useState (LibraryView.createState ())
         let needsRelogin = ctx.useState svc.Auth.NeedsRelogin
         let reloginBusy = ctx.useState false
 
@@ -180,7 +181,7 @@ let view () =
                 ContentControl.content (
                     match page.Current with
                     | Library ->
-                        LibraryView.view
+                        LibraryView.viewWithState libraryState.Current
                             (fun workno -> page.Set(Detail workno))
                             (fun () -> page.Set Downloads)
                         :> obj

@@ -61,6 +61,7 @@
   "library.action.selectWork": "作品を選択",
   "library.action.download": "ダウンロード",
   "library.action.update": "更新",
+  "library.action.updateAll": "すべて更新 ({0})",
   "library.action.uninstall": "アンインストール",
   "library.action.favorite": "お気に入り",
   "library.action.unfavorite": "お気に入り解除",
